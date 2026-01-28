@@ -1,30 +1,30 @@
 # ChronosArchiver API Reference
 
-Complete API documentation for all modules and classes.
+Complete API documentation for all public classes, methods, and functions.
 
 ## Table of Contents
 
-1. [Core API](#core-api)
-2. [Discovery Module](#discovery-module)
-3. [Ingestion Module](#ingestion-module)
-4. [Transformation Module](#transformation-module)
-5. [Indexing Module](#indexing-module)
-6. [Queue Manager](#queue-manager)
-7. [Configuration](#configuration)
-8. [Data Models](#data-models)
-9. [Utilities](#utilities)
+- [Core Classes](#core-classes)
+- [Discovery Module](#discovery-module)
+- [Ingestion Module](#ingestion-module)
+- [Transformation Module](#transformation-module)
+- [Indexing Module](#indexing-module)
+- [Queue Manager](#queue-manager)
+- [Configuration](#configuration)
+- [Models](#models)
+- [Utilities](#utilities)
 
----
+## Core Classes
 
-## Core API
+### ChronosArchiver
 
-### `ChronosArchiver`
-
-Main archiver class orchestrating the 4-stage pipeline.
+Main orchestrator class for the archival pipeline.
 
 ```python
 from chronos_archiver import ChronosArchiver
+from chronos_archiver.config import load_config
 
+config = load_config()
 archiver = ChronosArchiver(config)
 ```
 
@@ -32,14 +32,14 @@ archiver = ChronosArchiver(config)
 
 ##### `__init__(config: dict) -> None`
 
-Initialize ChronosArchiver with configuration.
+Initialize the archiver with configuration.
 
 **Parameters**:
 - `config` (dict): Configuration dictionary
 
 **Example**:
 ```python
-config = load_config('config.yaml')
+config = {"archive": {"output_dir": "./archive"}}
 archiver = ChronosArchiver(config)
 ```
 
@@ -53,7 +53,7 @@ Archive a single URL through the complete pipeline.
 **Example**:
 ```python
 await archiver.archive_url(
-    'https://web.archive.org/web/20090430060114/http://www.dar.org.br/'
+    "https://web.archive.org/web/20090430060114/http://www.dar.org.br/"
 )
 ```
 
@@ -67,8 +67,8 @@ Archive multiple URLs concurrently.
 **Example**:
 ```python
 urls = [
-    'https://web.archive.org/web/20090430060114/http://www.dar.org.br/',
-    'https://web.archive.org/web/20120302052501/http://www.dar.org.br/',
+    "https://web.archive.org/web/20090430060114/http://www.dar.org.br/",
+    "https://web.archive.org/web/20120302052501/http://www.dar.org.br/",
 ]
 await archiver.archive_urls(urls)
 ```
@@ -78,17 +78,25 @@ await archiver.archive_urls(urls)
 Start background workers for async processing.
 
 **Parameters**:
-- `worker_count` (int): Number of workers to start (default: 4)
+- `worker_count` (int): Number of workers to start
+
+**Example**:
+```python
+await archiver.start_workers(worker_count=8)
+```
 
 ##### `async shutdown() -> None`
 
 Gracefully shutdown the archiver and all workers.
 
----
+**Example**:
+```python
+await archiver.shutdown()
+```
 
 ## Discovery Module
 
-### `WaybackDiscovery`
+### WaybackDiscovery
 
 Discover archived URLs using the Wayback Machine CDX API.
 
@@ -102,7 +110,7 @@ discovery = WaybackDiscovery(config)
 
 ##### `async find_snapshots(url: str) -> list[ArchiveSnapshot]`
 
-Find all snapshots for a given URL or URL pattern.
+Find all snapshots for a given URL.
 
 **Parameters**:
 - `url` (str): URL or Wayback Machine URL
@@ -112,9 +120,28 @@ Find all snapshots for a given URL or URL pattern.
 
 **Example**:
 ```python
-snapshots = await discovery.find_snapshots('http://www.dar.org.br/')
+snapshots = await discovery.find_snapshots("http://www.dar.org.br/")
 for snapshot in snapshots:
     print(f"{snapshot.timestamp}: {snapshot.url}")
+```
+
+##### `async discover_site(base_url: str, max_depth: int = 3) -> list[ArchiveSnapshot]`
+
+Discover all pages from a site by crawling links.
+
+**Parameters**:
+- `base_url` (str): Base URL to start discovery
+- `max_depth` (int): Maximum crawl depth
+
+**Returns**:
+- `list[ArchiveSnapshot]`: All discovered snapshots
+
+**Example**:
+```python
+snapshots = await discovery.discover_site(
+    "http://www.dar.org.br/",
+    max_depth=2
+)
 ```
 
 ##### `async batch_discover(urls: list[str]) -> list[ArchiveSnapshot]`
@@ -125,13 +152,17 @@ Discover snapshots for multiple URLs concurrently.
 - `urls` (list[str]): List of URLs
 
 **Returns**:
-- `list[ArchiveSnapshot]`: Combined list of all snapshots
+- `list[ArchiveSnapshot]`: Combined list of snapshots
 
----
+**Example**:
+```python
+urls = ["http://www.dar.org.br/", "http://www.ieab.org.br/"]
+snapshots = await discovery.batch_discover(urls)
+```
 
 ## Ingestion Module
 
-### `ContentIngestion`
+### ContentIngestion
 
 Download and validate content from the Wayback Machine.
 
@@ -165,17 +196,36 @@ if content:
 Download multiple snapshots concurrently.
 
 **Parameters**:
-- `snapshots` (list[ArchiveSnapshot]): Snapshots to download
-- `concurrency` (int): Maximum concurrent downloads (default: 10)
+- `snapshots` (list[ArchiveSnapshot]): List of snapshots
+- `concurrency` (int): Maximum concurrent downloads
 
 **Returns**:
 - `list[Optional[DownloadedContent]]`: List of downloaded content
 
----
+**Example**:
+```python
+contents = await ingestion.batch_download(snapshots, concurrency=20)
+successful = [c for c in contents if c is not None]
+```
+
+##### `sanitize_content(content: bytes) -> bytes`
+
+Sanitize downloaded content.
+
+**Parameters**:
+- `content` (bytes): Raw content bytes
+
+**Returns**:
+- `bytes`: Sanitized content
+
+**Example**:
+```python
+clean = ingestion.sanitize_content(raw_content)
+```
 
 ## Transformation Module
 
-### `ContentTransformation`
+### ContentTransformation
 
 Transform content for local archiving.
 
@@ -205,11 +255,9 @@ if transformed:
     print(f"Links: {len(transformed.links)}")
 ```
 
----
-
 ## Indexing Module
 
-### `ContentIndexer`
+### ContentIndexer
 
 Index and store archived content.
 
@@ -244,7 +292,7 @@ Search indexed content.
 
 **Parameters**:
 - `query` (str): Search query
-- `limit` (int): Maximum results (default: 100)
+- `limit` (int): Maximum results
 
 **Returns**:
 - `list[IndexedContent]`: Matching indexed content
@@ -253,14 +301,21 @@ Search indexed content.
 ```python
 results = await indexer.search("Diocese Anglicana", limit=10)
 for result in results:
-    print(result.metadata.get('title'))
+    print(result.metadata.get("title"))
 ```
 
----
+##### `async close() -> None`
+
+Close database connections.
+
+**Example**:
+```python
+await indexer.close()
+```
 
 ## Queue Manager
 
-### `QueueManager`
+### QueueManager
 
 Manage message queues for async processing.
 
@@ -285,8 +340,8 @@ Disconnect from queue backend.
 Add a message to a queue.
 
 **Parameters**:
-- `queue_name` (str): Queue name
-- `message_type` (str): Message type
+- `queue_name` (str): Name of the queue
+- `message_type` (str): Type of message
 - `payload` (dict): Message payload
 
 **Returns**:
@@ -297,128 +352,160 @@ Add a message to a queue.
 Remove and return a message from a queue.
 
 **Parameters**:
-- `queue_name` (str): Queue name
+- `queue_name` (str): Name of the queue
 - `timeout` (int): Blocking timeout in seconds
 
 **Returns**:
 - `Optional[QueueMessage]`: Message or None
 
----
+##### `async queue_size(queue_name: str) -> int`
+
+Get the size of a queue.
+
+##### `async clear_queue(queue_name: str) -> None`
+
+Clear all messages from a queue.
 
 ## Configuration
 
-### `load_config(config_path: Optional[str] = None) -> dict`
+### load_config
 
 Load configuration from YAML file.
 
+```python
+from chronos_archiver.config import load_config
+
+config = load_config("config.yaml")
+```
+
 **Parameters**:
-- `config_path` (Optional[str]): Path to config file
+- `config_path` (Optional[str]): Path to configuration file
 
 **Returns**:
 - `dict`: Configuration dictionary
 
-**Example**:
-```python
-from chronos_archiver.config import load_config
-
-config = load_config('config.yaml')
-```
-
-### `save_config(config: dict, config_path: str) -> None`
+### save_config
 
 Save configuration to YAML file.
 
-**Parameters**:
-- `config` (dict): Configuration dictionary
-- `config_path` (str): Path to save file
-
----
-
-## Data Models
-
-All data models use Pydantic for validation.
-
-### `ArchiveSnapshot`
-
 ```python
-class ArchiveSnapshot(BaseModel):
-    url: str
-    original_url: str
-    timestamp: str
-    mime_type: Optional[str]
-    status_code: Optional[int]
-    digest: Optional[str]
-    length: Optional[int]
-    status: ArchiveStatus
+from chronos_archiver.config import save_config
+
+save_config(config, "config.yaml")
 ```
 
-### `DownloadedContent`
+### get_default_config
+
+Get default configuration.
 
 ```python
-class DownloadedContent(BaseModel):
-    snapshot: ArchiveSnapshot
-    content: bytes
-    headers: dict[str, str]
-    encoding: Optional[str]
+from chronos_archiver.config import get_default_config
+
+config = get_default_config()
 ```
 
-### `TransformedContent`
+## Models
 
-```python
-class TransformedContent(BaseModel):
-    snapshot: ArchiveSnapshot
-    content: str
-    text_content: Optional[str]
-    metadata: dict[str, Any]
-    links: list[str]
-```
+### ArchiveSnapshot
 
-### `IndexedContent`
+Represents a snapshot from the Wayback Machine.
 
-```python
-class IndexedContent(BaseModel):
-    id: Optional[int]
-    snapshot: ArchiveSnapshot
-    content: str
-    text_content: Optional[str]
-    metadata: dict[str, Any]
-```
+**Fields**:
+- `url` (str): Wayback Machine URL
+- `original_url` (str): Original URL
+- `timestamp` (str): Snapshot timestamp
+- `mime_type` (Optional[str]): MIME type
+- `status_code` (Optional[int]): HTTP status code
+- `digest` (Optional[str]): Content digest
+- `length` (Optional[int]): Content length
+- `status` (ArchiveStatus): Processing status
 
----
+### DownloadedContent
+
+Represents downloaded content.
+
+**Fields**:
+- `snapshot` (ArchiveSnapshot): Associated snapshot
+- `content` (bytes): Raw content
+- `headers` (dict): HTTP headers
+- `encoding` (Optional[str]): Content encoding
+
+### TransformedContent
+
+Represents transformed content.
+
+**Fields**:
+- `snapshot` (ArchiveSnapshot): Associated snapshot
+- `content` (str): Transformed HTML
+- `text_content` (Optional[str]): Extracted text
+- `metadata` (dict): Extracted metadata
+- `links` (list[str]): Extracted links
+
+### IndexedContent
+
+Represents indexed content.
+
+**Fields**:
+- `id` (Optional[int]): Database ID
+- `snapshot` (ArchiveSnapshot): Associated snapshot
+- `content` (str): Stored content
+- `text_content` (Optional[str]): Searchable text
+- `metadata` (dict): Metadata
 
 ## Utilities
 
-### URL Utilities
+### parse_wayback_url
+
+Parse a Wayback Machine URL.
 
 ```python
-from chronos_archiver.utils import (
-    parse_wayback_url,
-    build_wayback_url,
-    normalize_url,
-    is_valid_url,
-)
+from chronos_archiver.utils import parse_wayback_url
 
-# Parse Wayback URL
 parsed = parse_wayback_url(
-    'https://web.archive.org/web/20090430060114/http://www.dar.org.br/'
+    "https://web.archive.org/web/20090430060114/http://www.dar.org.br/"
 )
-# Returns: {'timestamp': '20090430060114', 'original_url': 'http://www.dar.org.br/'}
-
-# Build Wayback URL
-url = build_wayback_url('20090430060114', 'http://www.dar.org.br/')
-# Returns: 'https://web.archive.org/web/20090430060114/http://www.dar.org.br/'
+print(parsed["timestamp"])  # "20090430060114"
+print(parsed["original_url"])  # "http://www.dar.org.br/"
 ```
 
-### Logging
+### build_wayback_url
+
+Build a Wayback Machine URL.
 
 ```python
-from chronos_archiver.utils import setup_logging
+from chronos_archiver.utils import build_wayback_url
 
-logger = setup_logging(config)
-logger.info("Started archiving")
+url = build_wayback_url("20090430060114", "http://www.dar.org.br/")
+# "https://web.archive.org/web/20090430060114/http://www.dar.org.br/"
 ```
 
----
+### normalize_url
 
-**Last Updated**: January 2026  
-**Version**: 1.0.0
+Normalize a URL for consistent comparison.
+
+```python
+from chronos_archiver.utils import normalize_url
+
+normalized = normalize_url("HTTP://EXAMPLE.COM:80/")
+# "http://example.com"
+```
+
+### calculate_hash
+
+Calculate hash of content.
+
+```python
+from chronos_archiver.utils import calculate_hash
+
+hash_value = calculate_hash(content, "sha256")
+```
+
+### format_bytes
+
+Format byte size in human-readable format.
+
+```python
+from chronos_archiver.utils import format_bytes
+
+print(format_bytes(1024 * 1024))  # "1.0 MB"
+```

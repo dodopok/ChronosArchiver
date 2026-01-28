@@ -1,363 +1,445 @@
 # ChronosArchiver Architecture
 
-This document provides a detailed overview of the ChronosArchiver system architecture.
+This document provides a detailed overview of ChronosArchiver's architecture, design decisions, and implementation details.
 
 ## Table of Contents
 
-1. [System Overview](#system-overview)
-2. [Pipeline Architecture](#pipeline-architecture)
-3. [Component Details](#component-details)
-4. [Data Flow](#data-flow)
-5. [Scalability](#scalability)
-6. [Technology Stack](#technology-stack)
+- [System Overview](#system-overview)
+- [Pipeline Architecture](#pipeline-architecture)
+- [Component Details](#component-details)
+- [Data Flow](#data-flow)
+- [Scalability](#scalability)
+- [Performance Considerations](#performance-considerations)
 
 ## System Overview
 
-ChronosArchiver is built as a multi-stage asynchronous pipeline system designed to efficiently archive websites from the Internet Archive's Wayback Machine. The system emphasizes:
+ChronosArchiver is designed as a modular, asynchronous archival system that processes web pages through a four-stage pipeline. The system emphasizes:
 
-- **Modularity**: Each stage is independently testable and replaceable
-- **Scalability**: Horizontal scaling via worker processes
-- **Reliability**: Retry logic, error handling, and data validation
-- **Performance**: Async I/O and concurrent processing
+- **Modularity**: Each stage is independent and can be tested/deployed separately
+- **Asynchronicity**: Heavy use of `asyncio` for I/O-bound operations
+- **Scalability**: Message queue-based architecture for distributed processing
+- **Reliability**: Retry mechanisms, error handling, and data validation
+- **Extensibility**: Plugin architecture for custom processors
+
+### High-Level Architecture
+
+```
+┌───────────────────────────────────────────────────┐
+│                 ChronosArchiver                          │
+│                                                          │
+│  ┌─────────────────────────────────────────┐  │
+│  │            4-Stage Pipeline                  │  │
+│  │                                              │  │
+│  │  Discovery → Ingestion → Transform → Index  │  │
+│  └─────────────────────────────────────────┘  │
+│                     │                                    │
+│                     │                                    │
+│  ┌─────────────────────────────────────────┐  │
+│  │          Queue Manager                    │  │
+│  │                                              │  │
+│  │  Redis/RabbitMQ Message Queues            │  │
+│  └─────────────────────────────────────────┘  │
+│                                                          │
+└───────────────────────────────────────────────────┘
+         │                              │
+         │                              │
+    ┌────┴────┐                    ┌────┴─────┐
+    │  Redis  │                    │ Database │
+    └─────────┘                    └──────────┘
+```
 
 ## Pipeline Architecture
 
-### 4-Stage Pipeline
+### Stage 1: Discovery
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        ChronosArchiver Pipeline                      │
-└─────────────────────────────────────────────────────────────────────┘
+**Purpose**: Find and catalog all available snapshots for target URLs
 
-┌──────────────┐       ┌──────────────┐       ┌──────────────┐       ┌──────────────┐
-│              │       │              │       │              │       │              │
-│  Discovery   │──────>│  Ingestion   │──────>│Transformation│──────>│   Indexing   │
-│              │       │              │       │              │       │              │
-└──────────────┘       └──────────────┘       └──────────────┘       └──────────────┘
-       │                      │                      │                      │
-       v                      v                      v                      v
-   [Queue 1]              [Queue 2]              [Queue 3]              [Database]
-   Discovery              Ingestion           Transformation            + Filesystem
-```
+**Input**: URL or URL pattern
 
-### Message Queue Integration
+**Output**: List of `ArchiveSnapshot` objects
 
-Each stage communicates via message queues (Redis by default):
+**Components**:
+- CDX API client
+- URL parser
+- Deduplication logic
+- Status code filter
 
-```python
-# Asynchronous message flow
-Discovery -> [discovery_queue] -> Ingestion Worker
-Ingestion -> [ingestion_queue] -> Transformation Worker  
-Transformation -> [transformation_queue] -> Indexing Worker
-```
+**Process**:
+1. Parse input URL (Wayback URL or original URL)
+2. Query CDX API for all snapshots
+3. Parse CDX response (JSON format)
+4. Filter by status codes (default: 200, 301, 302)
+5. Deduplicate by content digest
+6. Create `ArchiveSnapshot` objects
+
+**Key Features**:
+- Handles both Wayback URLs and original URLs
+- Supports wildcard/prefix matching
+- Configurable filters
+- Pagination support for large result sets
+
+### Stage 2: Ingestion
+
+**Purpose**: Download content from the Wayback Machine
+
+**Input**: `ArchiveSnapshot` object
+
+**Output**: `DownloadedContent` object
+
+**Components**:
+- Async HTTP client (`aiohttp`)
+- Rate limiter (throttling)
+- Retry mechanism
+- Content validator
+
+**Process**:
+1. Apply rate limiting
+2. Send HTTP GET request to Wayback URL
+3. Validate response headers
+4. Check file size limits
+5. Download content
+6. Verify content hash (if available)
+7. Sanitize content
+
+**Key Features**:
+- Automatic retries with exponential backoff
+- Rate limiting to respect Wayback Machine
+- File size limits
+- Content hash verification
+- Connection pooling
+
+### Stage 3: Transformation
+
+**Purpose**: Transform content for local archival
+
+**Input**: `DownloadedContent` object
+
+**Output**: `TransformedContent` object
+
+**Components**:
+- HTML parser (BeautifulSoup)
+- Link rewriter
+- Metadata extractor
+- Text extractor
+
+**Process**:
+1. Decode content (handle various encodings)
+2. Parse HTML with BeautifulSoup
+3. Rewrite links:
+   - Convert relative to absolute
+   - Prefix with Wayback timestamp
+   - Make relative to archive root
+4. Extract metadata:
+   - Title, description, keywords
+   - Open Graph tags
+   - Language
+5. Extract plain text for search
+6. Extract all links
+7. Optional: remove scripts, comments
+
+**Key Features**:
+- Preserves link structure
+- Handles various URL formats
+- CSS url() rewriting
+- Encoding fallback
+- Configurable transformations
+
+### Stage 4: Indexing
+
+**Purpose**: Store and index content for retrieval
+
+**Input**: `TransformedContent` object
+
+**Output**: `IndexedContent` object
+
+**Components**:
+- File storage system
+- Database (SQLAlchemy)
+- Compression (gzip)
+- Search index
+
+**Process**:
+1. Generate file path (date-based structure)
+2. Optionally compress content
+3. Write to filesystem
+4. Extract searchable fields
+5. Store metadata in database
+6. Update search index
+
+**Key Features**:
+- Date-based directory organization
+- Optional compression
+- Full-text search
+- Metadata indexing
+- SQLite or PostgreSQL support
 
 ## Component Details
 
-### 1. Discovery Module (`discovery.py`)
+### Queue Manager
 
-**Purpose**: Find and identify URLs to archive
+**Purpose**: Coordinate async processing across stages
 
-**Key Features**:
-- CDX API integration
-- URL pattern matching
-- Snapshot deduplication
-- Batch discovery
+**Implementation**: Redis-backed message queues
 
-**Process**:
-1. Query Wayback Machine CDX API
-2. Parse JSON responses
-3. Filter by status code and MIME type
-4. Deduplicate by content digest
-5. Create `ArchiveSnapshot` objects
+**Queues**:
+- `chronos:discovery` - URLs to discover
+- `chronos:ingestion` - Snapshots to download
+- `chronos:transformation` - Content to transform
+- `chronos:indexing` - Content to index
 
-**Example CDX Query**:
-```
-GET https://web.archive.org/cdx/search/cdx
-  ?url=example.com
-  &output=json
-  &fl=timestamp,original,mimetype,statuscode,digest,length
-```
+**Features**:
+- Message persistence
+- Retry logic with retry count
+- TTL for messages
+- Worker pool management
+- Graceful shutdown
 
-### 2. Ingestion Module (`ingestion.py`)
+### Configuration System
 
-**Purpose**: Download content from Wayback Machine
+**Implementation**: YAML-based with Pydantic validation
 
-**Key Features**:
-- Async HTTP downloads
-- Rate limiting (throttling)
-- Content validation
-- Retry logic with exponential backoff
-- Size limits
+**Structure**:
+```yaml
+archive:
+  output_dir: "./archive"
+  user_agent: "ChronosArchiver/1.0"
 
-**Process**:
-1. Fetch URL from Wayback Machine
-2. Validate content size
-3. Verify content hash (if available)
-4. Sanitize downloaded content
-5. Create `DownloadedContent` object
+queue:
+  backend: "redis"
+  redis_url: "redis://localhost:6379/0"
 
-**Rate Limiting**:
-```python
-default: 5 requests/second
-concurrent: 10 simultaneous connections
+processing:
+  workers: 4
+  retry_attempts: 3
+
+database:
+  type: "sqlite"
+  sqlite_path: "./archive/chronos.db"
 ```
 
-### 3. Transformation Module (`transformation.py`)
-
-**Purpose**: Transform content for local archiving
-
-**Key Features**:
-- HTML parsing with BeautifulSoup
-- Link rewriting
-- Metadata extraction
-- Text extraction
-- Content cleaning
-
-**Process**:
-1. Decode HTML content
-2. Parse with BeautifulSoup
-3. Rewrite links to local/archived versions
-4. Extract metadata (title, description, etc.)
-5. Extract plain text for search
-6. Clean and normalize HTML
-7. Create `TransformedContent` object
-
-**Link Rewriting**:
-```html
-<!-- Original -->
-<a href="/page.html">Link</a>
-
-<!-- Rewritten -->
-<a href="/20090430060114/http://example.com/page.html">Link</a>
-```
-
-### 4. Indexing Module (`indexing.py`)
-
-**Purpose**: Store and index content
-
-**Key Features**:
-- SQLite/PostgreSQL storage
-- File system organization
-- Content compression
-- Full-text search
-- Metadata indexing
-
-**Process**:
-1. Generate file path (organized by date)
-2. Compress content (optional)
-3. Write to file system
-4. Store metadata in database
-5. Create searchable index
-6. Return `IndexedContent` object
-
-**File Organization**:
-```
-archive/
-├── content/
-│   ├── 2009/
-│   │   ├── 04/
-│   │   │   └── 30/
-│   │   │       └── 20090430060114_www.dar.org.br_.html.gz
-│   ├── 2012/
-│   └── 2015/
-└── chronos.db
-```
-
-### 5. Queue Manager (`queue_manager.py`)
-
-**Purpose**: Manage async message queues
-
-**Key Features**:
-- Redis backend support
-- Worker management
-- Message routing
-- Retry handling
-- Queue monitoring
-
-**Worker Model**:
-```python
-Worker Process:
-1. Poll queues in order (discovery -> ingestion -> transformation -> indexing)
-2. Process message with appropriate handler
-3. On success: dequeue message
-4. On failure: retry up to max_attempts
-5. Repeat
-```
-
-## Data Flow
-
-### Complete Archive Flow
-
-```
-1. User Input
-   ↓
-2. Discovery
-   - Query CDX API
-   - Create ArchiveSnapshot objects
-   ↓
-3. Queue → discovery_queue
-   ↓
-4. Ingestion Worker
-   - Download content
-   - Validate and sanitize
-   - Create DownloadedContent
-   ↓
-5. Queue → ingestion_queue
-   ↓
-6. Transformation Worker
-   - Parse HTML
-   - Rewrite links
-   - Extract metadata
-   - Create TransformedContent
-   ↓
-7. Queue → transformation_queue
-   ↓
-8. Indexing Worker
-   - Store to filesystem
-   - Index in database
-   - Create IndexedContent
-   ↓
-9. Complete!
-```
+**Validation**: Pydantic models ensure type safety and defaults
 
 ### Data Models
 
-```python
-ArchiveSnapshot
-├── url: str
-├── original_url: str
-├── timestamp: str
-├── mime_type: str
-├── status_code: int
-├── digest: str
-└── status: ArchiveStatus
+**Pydantic Models**:
+- `ArchiveSnapshot` - Snapshot metadata
+- `DownloadedContent` - Raw downloaded data
+- `TransformedContent` - Processed content
+- `IndexedContent` - Stored content
+- `QueueMessage` - Inter-stage messages
+- `ProcessingStats` - Pipeline statistics
 
-DownloadedContent
-├── snapshot: ArchiveSnapshot
-├── content: bytes
-├── headers: dict
-└── encoding: str
+**Database Models** (SQLAlchemy):
+- `ArchivedPage` - Indexed page record
 
-TransformedContent
-├── snapshot: ArchiveSnapshot
-├── content: str (transformed HTML)
-├── text_content: str
-├── metadata: dict
-└── links: list[str]
+## Data Flow
 
-IndexedContent
-├── id: int
-├── snapshot: ArchiveSnapshot
-├── content: str
-├── text_content: str
-└── metadata: dict
+### Synchronous Mode
+
+```
+User Input
+    ↓
+Discovery → Snapshots
+    ↓
+Ingestion → Content
+    ↓
+Transformation → Transformed
+    ↓
+Indexing → Stored
+    ↓
+Result to User
+```
+
+### Asynchronous Mode
+
+```
+User Input
+    ↓
+Discovery → Queue 1
+                ↓
+            Worker Pool
+                ↓
+            Ingestion → Queue 2
+                        ↓
+                    Worker Pool
+                        ↓
+                    Transformation → Queue 3
+                                    ↓
+                                Worker Pool
+                                    ↓
+                                Indexing → Database
 ```
 
 ## Scalability
 
 ### Horizontal Scaling
 
-```
-┌─────────────────────────────────────────────────┐
-│              Load Balancer / Queue              │
-└─────────────────────────────────────────────────┘
-          │              │              │
-    ┌─────┴─────┐  ┌─────┴─────┐  ┌─────┴─────┐
-    │  Worker 1 │  │  Worker 2 │  │  Worker N │
-    │           │  │           │  │           │
-    │  All 4    │  │  All 4    │  │  All 4    │
-    │  Stages   │  │  Stages   │  │  Stages   │
-    └───────────┘  └───────────┘  └───────────┘
-          │              │              │
-    ┌─────┴──────────────┴──────────────┴─────┐
-    │          Shared Database & Storage       │
-    └──────────────────────────────────────────┘
+**Worker Nodes**:
+- Multiple workers can process queues concurrently
+- Deploy workers on separate machines
+- Redis handles distribution
+
+**Docker Deployment**:
+```yaml
+services:
+  worker:
+    image: chronos-archiver
+    deploy:
+      replicas: 5
 ```
 
-### Performance Optimizations
+### Vertical Scaling
 
-1. **Async I/O**: All network operations use `asyncio`
-2. **Connection Pooling**: Reuse HTTP connections
-3. **Batch Processing**: Process multiple items concurrently
-4. **Rate Limiting**: Prevent overwhelming source servers
-5. **Content Compression**: Reduce storage requirements
-6. **Database Indexing**: Fast lookups by URL, timestamp, digest
+**Resource Tuning**:
+- Increase worker count per node
+- Adjust concurrent request limits
+- Tune connection pool sizes
 
-## Technology Stack
-
-### Core Libraries
-
-- **Python 3.8+**: Modern async/await syntax
-- **aiohttp**: Async HTTP client
-- **asyncio**: Async I/O framework
-- **BeautifulSoup4**: HTML parsing
-- **SQLAlchemy**: Database ORM
-- **Redis**: Message queue backend
-- **Pydantic**: Data validation
-- **Click**: CLI framework
-
-### Optional Components
-
-- **PostgreSQL**: Production database
-- **RabbitMQ**: Alternative queue backend
-- **Prometheus**: Metrics collection
-- **Docker**: Containerization
-
-## Configuration
-
-All components are configurable via `config.yaml`:
-
+**Configuration**:
 ```yaml
 processing:
-  workers: 4                    # Concurrent workers
-  batch_size: 10               # Items per batch
-  requests_per_second: 5       # Rate limit
-  concurrent_requests: 10      # Max simultaneous
+  workers: 8
+  concurrent_requests: 20
+  batch_size: 50
 ```
+
+### Database Scaling
+
+**SQLite** (Development):
+- Single-file database
+- Limited concurrency
+- Good for < 1M records
+
+**PostgreSQL** (Production):
+- Full concurrency support
+- Replication
+- Partitioning for large datasets
+
+## Performance Considerations
+
+### Bottlenecks
+
+1. **Network I/O**: Downloading from Wayback Machine
+   - Solution: Increase concurrent requests, use connection pooling
+
+2. **Parsing**: HTML parsing with BeautifulSoup
+   - Solution: Use lxml parser, consider parallel processing
+
+3. **Database Writes**: Indexing operations
+   - Solution: Batch inserts, use PostgreSQL, optimize indexes
+
+### Optimizations
+
+**Async I/O**:
+```python
+# Bad: Sequential
+for url in urls:
+    await download(url)
+
+# Good: Concurrent
+await asyncio.gather(*[download(url) for url in urls])
+```
+
+**Connection Pooling**:
+```python
+async with aiohttp.ClientSession() as session:
+    # Reuse connections
+    for url in urls:
+        await session.get(url)
+```
+
+**Batch Processing**:
+```python
+# Process in batches of 10
+for batch in chunks(snapshots, 10):
+    await process_batch(batch)
+```
+
+### Memory Management
+
+**Streaming**:
+- Stream large files instead of loading into memory
+- Use generators for large result sets
+
+**Limits**:
+- File size limits (default: 100MB)
+- Queue size limits
+- Worker count limits
 
 ## Error Handling
 
 ### Retry Strategy
 
 ```python
-Retry Logic:
-- Initial delay: 5 seconds
-- Backoff multiplier: 2x
-- Max attempts: 3
+max_attempts = 3
+delay = 5  # seconds
+backoff = 2  # exponential
 
-Example:
-  Attempt 1: Immediate
-  Attempt 2: 5 seconds
-  Attempt 3: 10 seconds
-  Final: Mark as failed
+for attempt in range(max_attempts):
+    try:
+        return await operation()
+    except Exception:
+        if attempt < max_attempts - 1:
+            await asyncio.sleep(delay * (backoff ** attempt))
 ```
 
 ### Failure Recovery
 
-1. Log all errors with context
-2. Update status to FAILED
-3. Store partial results if possible
-4. Continue processing other items
-5. Generate failure report
+- Failed messages re-queued with retry count
+- Persistent queues survive crashes
+- Database transactions for atomicity
+- Logging for debugging
+
+## Monitoring
+
+### Metrics
+
+- Queue sizes
+- Processing throughput
+- Error rates
+- Download speeds
+- Storage usage
+
+### Logging
+
+```python
+logger.info(f"Processing snapshot: {snapshot.url}")
+logger.error(f"Download failed: {error}")
+logger.warning(f"Large file skipped: {size}")
+```
+
+### Health Checks
+
+- Redis connectivity
+- Database connectivity
+- Disk space
+- Worker status
 
 ## Security Considerations
 
-1. **Input Validation**: All URLs validated
-2. **Content Sanitization**: Remove null bytes, malicious scripts
-3. **Size Limits**: Prevent memory exhaustion
-4. **SSL Verification**: Enabled by default
-5. **User Agent**: Identifies the archiver
+### Input Validation
+
+- Validate URLs before processing
+- Sanitize filenames
+- Limit file sizes
+
+### Content Safety
+
+- Remove null bytes
+- Validate content types
+- Sandbox execution (future)
+
+### Authentication
+
+- No authentication required for Wayback Machine
+- Optional auth for internal deployments
 
 ## Future Enhancements
 
-1. **Incremental Archiving**: Only download changed content
-2. **Distributed Processing**: Multi-machine deployments
-3. **Advanced Search**: Full-text indexing with Elasticsearch
-4. **Web UI**: Browser-based interface
-5. **WARC Export**: Standard archive format
-6. **Kubernetes**: Container orchestration
-
----
-
-**Last Updated**: January 2026  
-**Version**: 1.0.0
+1. **WARC Format Support**: Export to standard WARC format
+2. **Incremental Archiving**: Only archive new snapshots
+3. **Web UI**: Browse archived content
+4. **Full-Text Search**: Elasticsearch integration
+5. **CDN Support**: Distribute archived content
+6. **Webhooks**: Notify on completion
+7. **API**: RESTful API for programmatic access
