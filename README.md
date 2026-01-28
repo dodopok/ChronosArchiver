@@ -1,463 +1,453 @@
-# ChronosArchiver
+# 🕒 ChronosArchiver
 
-> Sistema de arquivamento inteligente para preservar e analisar sites da Wayback Machine  
-> Intelligent archival system to download and analyze websites from the Internet Archive's Wayback Machine
+> **Sistema Completo de Arquivamento Inteligente com Interface Web Moderna**  
+> **Complete Intelligent Archiving System with Modern Web Interface**
 
 [![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![React](https://img.shields.io/badge/react-18.2-61dafb.svg)](https://reactjs.org/)
+[![TypeScript](https://img.shields.io/badge/typescript-5.2-blue.svg)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-## 🌟 Recursos Principais / Key Features
+---
 
-### 📦 Pipeline de 4 Estágios / 4-Stage Pipeline
-- **Discovery**: Integração com CDX API para encontrar URLs / CDX API integration
-- **Ingestion**: Download assíncrono com retry / Async downloading with retry
-- **Transformation**: Reescrita de links e extração de metadados / Link rewriting and metadata extraction
-- **Indexing**: Armazenamento e busca / Storage and search
+## 🌟 Visão Geral / Overview
 
-### 🧠 Motor de Inteligência / Intelligence Engine
-- **Detecção de Idiomas** / Language Detection
-- **Extração de Entidades Nomeadas** (pessoas, organizações, locais) / Named Entity Extraction
-- **Extração de Palavras-Chave** / Keyword Extraction  
-- **Classificação de Tópicos** / Topic Classification
-- **Análise de Sentimento** / Sentiment Analysis
+ChronosArchiver é um sistema completo para arquivar, analisar e pesquisar sites históricos da Wayback Machine com:
 
-### 🎥 Detecção de Embeds / Embed Detection
-- **YouTube** - Detecção automática de vídeos / Automatic video detection
-- **Vimeo** - Extração de embeds / Embed extraction
-- **Dailymotion** - Suporte completo / Full support
-- **SoundCloud** - Áudio embeds / Audio embeds
-- **Iframes Genéricos** / Generic iframes
+ChronosArchiver is a complete system to archive, analyze, and search historical websites from the Wayback Machine with:
 
-### 🔍 Busca Avançada / Advanced Search
-- **Meilisearch Integration** - Busca instantânea / Instant search
-- **Tolerância a Erros** / Typo tolerance
-- **Busca com Filtros** / Faceted search
-- **Destaque de Resultados** / Result highlighting
-- **Sugestões Automáticas** / Auto-suggestions
+- 📦 **Pipeline de 4 Estágios** / 4-Stage Async Pipeline
+- 🧠 **Motor de Inteligência com NLP** / Intelligence Engine with NLP
+- 🎥 **Detecção de Embeds** (YouTube, Vimeo) / Embed Detection
+- 🔍 **Busca Avançada** com Meilisearch / Advanced Search
+- 🌐 **Interface Web React** / React Web Interface
+- 📑 **Extração Apache Tika** / Apache Tika Extraction
+- 🇧🇷 **Suporte Completo a Português** / Full Portuguese Support
 
-### 🌎 Interface Web / Web Interface
-- **FastAPI** - API RESTful moderna / Modern RESTful API
-- **Interface de Busca** / Search interface
-- **Visualização de Embeds** / Embed viewing
-- **Estatísticas** / Statistics dashboard
-- **Suporte Bilingual** / Bilingual support (PT/EN)
+---
 
-### 📑 Extração Avançada / Advanced Extraction
-- **Apache Tika** - Extração de PDF, Office, imagens / PDF, Office, image extraction
-- **OCR** - Reconhecimento de texto em imagens / Text recognition in images
-- **Metadados** - Autor, data de criação, etc / Author, creation date, etc.
-
-## 🚀 Quick Start
-
-### Instalação / Installation
+## 🚀 Demonstração Rápida / Quick Demo
 
 ```bash
-# Clone the repository
-git clone https://github.com/dodopok/ChronosArchiver.git
-cd ChronosArchiver
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Install language models
-python -m spacy download pt_core_news_sm  # Portuguese
-python -m spacy download xx_ent_wiki_sm   # Multilingual
-
-# Install in development mode
-pip install -e .
-```
-
-### Iniciar Serviços / Start Services
-
-```bash
-# Start all services with Docker Compose
+# 1. Iniciar todos os serviços / Start all services
 docker-compose up -d
 
-# Services started:
-# - Redis (port 6379) - Message queues
-# - Meilisearch (port 7700) - Search engine
-# - Apache Tika (port 9998) - Text extraction
-# - ChronosArchiver API (port 8000) - Web interface
-# - Workers - Background processing
+# 2. Acessar interface web / Access web interface
+open http://localhost:3000
+
+# 3. Arquivar um site / Archive a site
+chronos archive https://web.archive.org/web/20090430060114/http://www.dar.org.br/
 ```
 
-### Usar / Usage
+**Serviços disponíveis / Available services:**
+- 🌐 **Frontend React**: http://localhost:3000
+- 🔧 **API Backend**: http://localhost:8000
+- 📚 **API Docs**: http://localhost:8000/api/docs
+- 🔍 **Meilisearch**: http://localhost:7700
+
+---
+
+## ✨ Recursos Principais / Key Features
+
+### 📦 Pipeline de Arquivamento / Archiving Pipeline
+
+```
+Discovery → Ingestion → Transformation → Indexing
+   🔍         📥            ♻️              💾
+```
+
+1. **Discovery** - Encontra snapshots via CDX API / Finds snapshots via CDX API
+2. **Ingestion** - Download assíncrono com retry / Async download with retry
+3. **Transformation** - Reescreve links e extrai dados / Rewrites links and extracts data
+4. **Indexing** - Armazena e indexa / Stores and indexes
+
+### 🧠 Motor de Inteligência / Intelligence Engine
+
+```python
+analysis = await intelligence.analyze(content)
+
+print(f"Idiomas: {analysis.languages}")  # [('pt', 0.95), ('en', 0.05)]
+print(f"Entidades: {analysis.entities}")  # {'ORG': ['Diocese...'], 'LOC': ['Recife']}
+print(f"Palavras-chave: {analysis.keywords}")  # ['diocese', 'igreja', ...]
+print(f"Tópicos: {analysis.topics}")  # ['religião', 'comunidade']
+print(f"Vídeos: {len(analysis.media_embeds)}")  # 5
+```
+
+**Recursos / Features:**
+- ✅ Detecção automática de idioma / Automatic language detection
+- ✅ Extração de entidades (pessoas, organizações, locais) / Entity extraction
+- ✅ Extração de palavras-chave / Keyword extraction
+- ✅ Classificação de tópicos / Topic classification
+- ✅ Geração de sumário / Summary generation
+
+### 🎥 Detecção de Embeds de Mídia / Media Embed Detection
+
+**Plataformas suportadas / Supported platforms:**
+
+| Plataforma | Detecção | Extração de ID | Status |
+|------------|----------|---------------|--------|
+| YouTube | ✅ | ✅ | Complete |
+| Vimeo | ✅ | ✅ | Complete |
+| Dailymotion | ✅ | ✅ | Complete |
+| SoundCloud | ✅ | - | Complete |
+| Iframes Genéricos | ✅ | - | Complete |
+
+```python
+for embed in analysis.media_embeds:
+    print(f"{embed.platform}: {embed.url}")
+    print(f"  ID: {embed.video_id}")
+    print(f"  Embed: {embed.embed_url}")
+```
+
+### 🔍 Busca Avançada / Advanced Search
+
+**Powered by Meilisearch:**
+- ⚡ **Instant search** (< 50ms)
+- 🔤 **Typo tolerance** - Encontra mesmo com erros / Finds even with typos
+- 🏷️ **Faceted search** - Filtros por tópico, idioma, mídia / Filter by topic, language, media
+- 🔆 **Highlighting** - Destaque dos termos buscados / Highlights search terms
+- 🇧🇷 **Portuguese optimized** - Otimizado para português
+
+### 🌐 Interface Web React / React Web Interface
+
+**Modern, responsive UI with:**
+
+| Feature | Description | Status |
+|---------|-------------|--------|
+| 📊 **Dashboard** | Real-time monitoring with WebSocket | ✅ |
+| 🔍 **Search** | Smart search with auto-suggestions | ✅ |
+| 📦 **Archive** | URL management and batch upload | ✅ |
+| 🎥 **Media Browser** | View embedded videos/audio | ✅ |
+| 📊 **Statistics** | Charts and metrics | ✅ |
+| 🌑 **Dark/Light Theme** | Theme toggle | ✅ |
+| 📱 **Responsive** | Mobile-first design | ✅ |
+
+---
+
+## 💻 Instalação / Installation
+
+### Optião 1: Docker Compose (Recomendado / Recommended)
 
 ```bash
-# Archive a single URL
+git clone https://github.com/dodopok/ChronosArchiver.git
+cd ChronosArchiver
+docker-compose up -d
+```
+
+**Isso inicia / This starts:**
+- ✅ Redis (port 6379)
+- ✅ Meilisearch (port 7700)
+- ✅ Apache Tika (port 9998)
+- ✅ PostgreSQL (port 5432)
+- ✅ FastAPI Backend (port 8000)
+- ✅ React Frontend (port 3000)
+- ✅ Workers (background)
+
+### Optião 2: Instalação Manual / Manual Installation
+
+#### Backend
+
+```bash
+# Python dependencies
+pip install -r requirements.txt
+pip install -e .
+
+# Language models
+python -m spacy download pt_core_news_sm
+python -m spacy download xx_ent_wiki_sm
+
+# Start services
+redis-server &
+meilisearch --http-addr 127.0.0.1:7700 &
+docker run -d -p 9998:9998 apache/tika:latest
+
+# Start API
+uvicorn chronos_archiver.api:app --host 0.0.0.0 --port 8000 --reload
+```
+
+#### Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+---
+
+## 📚 Uso / Usage
+
+### Via Interface Web / Via Web Interface
+
+1. **Acesse / Access**: http://localhost:3000
+2. **Vá para "Archive"** / Go to "Archive"
+3. **Adicione URLs** / Add URLs
+4. **Clique em "Archive"** / Click "Archive"
+5. **Monitore o progresso** no Dashboard / Monitor progress on Dashboard
+6. **Busque o conteúdo** na página Search / Search content on Search page
+
+### Via CLI
+
+```bash
+# Archive single URL
 chronos archive https://web.archive.org/web/20090430060114/http://www.dar.org.br/
 
 # Archive from file
 chronos archive --input examples/sample_sites.txt --workers 8
 
-# Start web interface
-uvicorn chronos_archiver.api:app --host 0.0.0.0 --port 8000
+# Start workers
+chronos workers start --count 4
 ```
 
-Acesse / Access: **http://localhost:8000**
+### Via API
 
-## 📚 Documentação / Documentation
+```bash
+# Search
+curl "http://localhost:8000/api/search?q=diocese&topics=religi%C3%A3o"
 
-- **[Guia de Uso / Usage Guide](docs/usage.md)** - Como usar o sistema / How to use
-- **[Motor de Inteligência / Intelligence Engine](docs/INTELLIGENCE.md)** - Recursos avançados / Advanced features
-- **[Arquitetura / Architecture](docs/architecture.md)** - Design do sistema / System design
-- **[API Reference](docs/api.md)** - Referência completa / Complete reference
+# Archive URLs
+curl -X POST http://localhost:8000/api/archive \
+  -H "Content-Type: application/json" \
+  -d '{"urls": ["https://web.archive.org/web/..."], "priority": "normal"}'
 
-## 💻 Uso Programático / Programmatic Usage
+# Get statistics
+curl http://localhost:8000/api/stats
+```
 
-### Exemplo Básico / Basic Example
+### Via Python
 
 ```python
 import asyncio
 from chronos_archiver import ChronosArchiver
+from chronos_archiver.intelligence import IntelligenceEngine
+from chronos_archiver.search import SearchEngine
 from chronos_archiver.config import load_config
 
 async def main():
     config = load_config()
     archiver = ChronosArchiver(config)
+    intelligence = IntelligenceEngine(config)
+    search = SearchEngine(config)
     
-    # Archive URL
-    await archiver.archive_url(
-        'https://web.archive.org/web/20090430060114/http://www.dar.org.br/'
-    )
+    # Archive with intelligence
+    url = "https://web.archive.org/web/20090430060114/http://www.dar.org.br/"
+    await archiver.archive_url(url, enable_intelligence=True)
+    
+    # Search
+    results = await search.search("diocese", limit=10)
+    for result in results:
+        print(f"{result.title}: {result.snippet}")
     
     await archiver.shutdown()
 
 asyncio.run(main())
 ```
 
-### Com Análise de Inteligência / With Intelligence Analysis
+---
 
-```python
-from chronos_archiver.intelligence import IntelligenceEngine
-from chronos_archiver.search import SearchEngine
+## 🏛️ Arquitetura / Architecture
 
-# Initialize engines
-intelligence = IntelligenceEngine(config)
-search = SearchEngine(config)
-
-# Process content
-snapshots = await archiver.discovery.find_snapshots(url)
-for snapshot in snapshots:
-    downloaded = await archiver.ingestion.download(snapshot)
-    transformed = await archiver.transformation.transform(downloaded)
-    
-    # Analyze with intelligence engine
-    analysis = await intelligence.analyze(transformed)
-    
-    print(f"Languages: {analysis.languages}")
-    print(f"Keywords: {analysis.keywords}")
-    print(f"Topics: {analysis.topics}")
-    print(f"Entities: {analysis.entities}")
-    print(f"Media embeds: {len(analysis.media_embeds)}")
-    
-    # Index in search engine
-    await search.index_content(analysis)
-
-# Search archived content
-results = await search.search("diocese anglicana", limit=10)
-for result in results:
-    print(f"{result.title} - {result.url}")
-```
-
-### Detecção de Embeds / Embed Detection
-
-```python
-# Analyze content for media embeds
-analysis = await intelligence.analyze(transformed)
-
-for embed in analysis.media_embeds:
-    if embed.type == "youtube":
-        print(f"YouTube Video: {embed.video_id}")
-        print(f"  URL: {embed.url}")
-        print(f"  Embed: {embed.embed_url}")
-    elif embed.type == "vimeo":
-        print(f"Vimeo Video: {embed.video_id}")
-```
-
-## 🌐 Interface Web / Web Interface
-
-### Página Principal / Home Page
-
-![ChronosArchiver Web Interface](https://via.placeholder.com/800x400.png?text=ChronosArchiver+Web+Interface)
-
-### Endpoints da API / API Endpoints
-
-#### Buscar / Search
-```bash
-curl "http://localhost:8000/api/search?q=diocese&topics=religião&limit=20"
-```
-
-#### Obter Facetas / Get Facets
-```bash
-curl "http://localhost:8000/api/facets"
-```
-
-#### Sugestões / Suggestions
-```bash
-curl "http://localhost:8000/api/suggest?q=igr"
-```
-
-#### Estatísticas / Statistics
-```bash
-curl "http://localhost:8000/api/stats"
-```
-
-### Documentação Interativa / Interactive Documentation
-
-- **Swagger UI**: http://localhost:8000/api/docs
-- **ReDoc**: http://localhost:8000/api/redoc
-
-## ⚙️ Configuração / Configuration
-
-Edite `config.yaml`:
-
-```yaml
-# Intelligence engine
-intelligence:
-  enable_nlp: true
-  enable_entity_extraction: true
-  enable_language_detection: true
-  enable_embed_detection: true
-
-# Apache Tika
-tika:
-  enabled: true
-  server_url: "http://localhost:9998"
-
-# Meilisearch
-search:
-  meilisearch_host: "http://localhost:7700"
-  index_name: "chronos_archive"
-
-# Web API
-api:
-  enabled: true
-  host: "0.0.0.0"
-  port: 8000
-  enable_cors: true
-
-# Processing
-processing:
-  workers: 4
-  requests_per_second: 5
-  retry_attempts: 3
-```
-
-## 📦 Sites de Exemplo / Sample Sites
-
-O projeto inclui URLs de exemplo para teste: / The project includes sample URLs for testing:
+### Stack Completo / Full Stack
 
 ```
-# Diocese Anglicana do Recife (DAR)
+┌─────────────────────────────────────────────────────────────────────┐
+│                        Frontend Layer                              │
+│   React + TypeScript + Material-UI + WebSocket + Recharts        │
+│                     http://localhost:3000                          │
+└─────────────────────────────────────────────────────────────────────┘
+                                    │
+                            REST API + WebSocket
+                                    │
+┌─────────────────────────────────────────────────────────────────────│
+│                        Backend Layer                              │
+│        FastAPI + ChronosArchiver + Intelligence Engine           │
+│                     http://localhost:8000                          │
+└─────────────────────────────────────────────────────────────────────┘
+            │               │               │               │
+            v               v               v               v
+       ┌────────┐   ┌───────────┐   ┌────────┐   ┌────────────┐
+       │ Redis  │   │Meilisearch│   │  Tika  │   │  PostgreSQL│
+       │  :6379 │   │   :7700   │   │ :9998 │   │    :5432   │
+       └────────┘   └───────────┘   └────────┘   └────────────┘
+```
+
+---
+
+## 📱 Screenshots da Interface / Interface Screenshots
+
+### Dashboard - Monitoramento em Tempo Real
+- 📊 Pipeline monitor com progress bars
+- 📈 Estatísticas em tempo real
+- 🔔 Notificações de jobs
+
+### Search - Busca Inteligente
+- 🔍 Auto-complete com suggestions
+- 🏷️ Filtros por tópico e idioma
+- 🎯 Resultados com highlighting
+
+### Archive - Gerenciamento de URLs
+- ➕ Adicionar URLs manualmente
+- 📄 Upload de arquivos .txt/.csv
+- 📤 Drag & drop support
+
+### Media Browser - Galeria de Mídia
+- 🎥 Grid de vídeos com thumbnails
+- ▶️ Player embutido
+- 🏷️ Filtros por plataforma
+
+---
+
+## 🛠️ Stack Tecnológico / Technology Stack
+
+### Frontend
+- **React 18** - UI library
+- **TypeScript** - Type safety
+- **Material-UI** - Component library
+- **Vite** - Build tool
+- **React Query** - Server state
+- **Zustand** - Client state
+- **Socket.io** - WebSocket
+- **Recharts** - Data visualization
+- **React Router** - Navigation
+
+### Backend
+- **Python 3.8+** - Language
+- **FastAPI** - Web framework
+- **SQLAlchemy** - ORM
+- **spaCy** - NLP
+- **langdetect** - Language detection
+- **BeautifulSoup** - HTML parsing
+- **aiohttp** - Async HTTP
+
+### Infrastructure
+- **Redis** - Message queues
+- **Meilisearch** - Search engine
+- **Apache Tika** - Text extraction
+- **PostgreSQL** - Database
+- **Docker** - Containerization
+- **Nginx** - Frontend server
+
+---
+
+## 📚 Documentação / Documentation
+
+### Português 🇧🇷
+- **[Tutorial Completo](docs/TUTORIAL_PT.md)** - Guia passo a passo
+- **[Motor de Inteligência](docs/INTELLIGENCE.md)** - Recursos avançados
+- **[Guia de Instalação](INSTALL.md)** - Instalação detalhada
+- **[Frontend](frontend/README.md)** - Documentação React
+
+### English 🇬🇧
+- **[Architecture Guide](docs/architecture.md)** - System design
+- **[API Reference](docs/api.md)** - Complete API docs
+- **[Usage Guide](docs/usage.md)** - How to use
+- **[Features List](FEATURES.md)** - All features
+
+---
+
+## 🎯 Sites de Exemplo / Sample Sites
+
+### Diocese Anglicana do Recife (DAR)
+```
 https://web.archive.org/web/20090430060114/http://www.dar.org.br/
 https://web.archive.org/web/20120302052501/http://www.dar.org.br/
 https://web.archive.org/web/20150406103050/http://dar.org.br/
 https://web.archive.org/web/20101223085644/http://dar.ieab.org.br/
+```
 
-# Igreja Episcopal Anglicana do Brasil (IEAB)
+### Igreja Episcopal Anglicana do Brasil (IEAB)
+```
 https://web.archive.org/web/20041022131803fw_/http://www.ieabrecife.com.br/
 https://web.archive.org/web/20050829171410fw_/http://www.ieabweb.org.br/
 https://web.archive.org/web/20051125104316fw_/http://www.ieabweb.org.br/dar/
 ```
 
-## 🔧 Recursos Avançados / Advanced Features
+---
 
-### Extração com Apache Tika / Extraction with Apache Tika
+## 🧪 Testes / Testing
 
-```python
-from chronos_archiver.tika import TikaExtractor
-
-extractor = TikaExtractor(config)
-result = extractor.extract_text(pdf_content)
-
-print(result['text'])  # Extracted text
-print(result['metadata'])  # Author, date, etc.
-```
-
-### Busca Avançada / Advanced Search
-
-```python
-# Search with filters
-results = await search.search(
-    "igreja",
-    filters={
-        "topics": ["religião", "comunidade"],
-        "languages": ["pt"],
-        "has_videos": True
-    },
-    limit=50,
-    offset=0
-)
-
-# Get facet counts
-facets = await search.get_facets()
-print(facets['topics'])  # Topic distribution
-print(facets['languages'])  # Language distribution
-```
-
-### Processamento em Lote / Batch Processing
-
-```python
-# Process multiple URLs concurrently
-urls = [
-    "https://web.archive.org/web/20090430060114/http://www.dar.org.br/",
-    "https://web.archive.org/web/20120302052501/http://www.dar.org.br/",
-    "https://web.archive.org/web/20150406103050/http://dar.org.br/",
-]
-
-await archiver.archive_urls(urls)
-```
-
-## 🐞 Testes / Testing
-
+### Backend
 ```bash
-# Run all tests
 pytest
-
-# Run with coverage
 pytest --cov=chronos_archiver --cov-report=html
-
-# Run specific tests
-pytest tests/test_intelligence.py -v
-pytest tests/integration/ -v
 ```
 
-## 📦 Docker
-
-### Usando Docker Compose / Using Docker Compose
-
+### Frontend
 ```bash
-# Start all services
-docker-compose up -d
-
-# View logs
-docker-compose logs -f api
-docker-compose logs -f worker
-
-# Scale workers
-docker-compose up -d --scale worker=4
-
-# Stop services
-docker-compose down
+cd frontend
+npm test
+npm run test:coverage
 ```
 
-### Build Manual / Manual Build
+---
 
-```bash
-# Build image
-docker build -t chronos-archiver .
+## 🔐 Recursos de Produção / Production Features
 
-# Run container
-docker run -d \
-  --name chronos \
-  -p 8000:8000 \
-  -v $(pwd)/archive:/app/archive \
-  -v $(pwd)/config.yaml:/app/config.yaml \
-  chronos-archiver
-```
+✅ Error handling e retry logic  
+✅ Rate limiting configuravel  
+✅ WebSocket para updates em tempo real  
+✅ Compressão de conteúdo  
+✅ Health checks  
+✅ Logging estruturado  
+✅ Múltiplos workers escaláveis  
+✅ Docker & Docker Compose  
+✅ CI/CD com GitHub Actions  
+✅ Responsive mobile design  
 
-## 🎓 Casos de Uso / Use Cases
-
-### 1. Pesquisa Histórica / Historical Research
-Arquive e analise versões históricas de sites para pesquisa acadêmica.
-
-Archive and analyze historical versions of websites for academic research.
-
-### 2. Preservação Digital / Digital Preservation
-Preserve conteúdo importante que pode desaparecer da web.
-
-Preserve important content that may disappear from the web.
-
-### 3. Análise de Conteúdo / Content Analysis
-Analise automaticamente conteúdo arquivado com NLP e inteligência artificial.
-
-Automatically analyze archived content with NLP and AI.
-
-### 4. Extração de Mídia / Media Extraction
-Detecte e catalogue vídeos e áudios embarcados em sites arquivados.
-
-Detect and catalog embedded videos and audio in archived sites.
-
-## 📊 Estrutura do Projeto / Project Structure
-
-```
-ChronosArchiver/
-├── src/chronos_archiver/
-│   ├── __init__.py
-│   ├── discovery.py          # Stage 1: URL discovery
-│   ├── ingestion.py          # Stage 2: Content download
-│   ├── transformation.py     # Stage 3: Content transformation
-│   ├── indexing.py           # Stage 4: Storage & indexing
-│   ├── intelligence.py       # 🧠 Intelligence engine
-│   ├── search.py             # 🔍 Meilisearch integration
-│   ├── tika.py               # 📑 Apache Tika integration
-│   ├── api.py                # 🌐 FastAPI web interface
-│   ├── queue_manager.py      # Queue management
-│   ├── models.py             # Data models
-│   ├── config.py             # Configuration
-│   ├── cli.py                # CLI interface
-│   └── utils.py              # Utilities
-├── tests/                    # 🧪 Test suite
-├── docs/                     # 📚 Documentation
-├── examples/                 # 💡 Usage examples
-├── docker-compose.yml        # 🐳 Docker configuration
-├── requirements.txt          # Dependencies
-└── config.yaml.example       # Sample configuration
-```
-
-## 🌟 Novos Recursos / New Features
-
-### v1.1.0 (Current)
-
-✅ Motor de inteligência com NLP / Intelligence engine with NLP  
-✅ Detecção de embeds (YouTube, Vimeo, etc.) / Embed detection  
-✅ Integração Meilisearch / Meilisearch integration  
-✅ Interface web com FastAPI / FastAPI web interface  
-✅ Integração Apache Tika / Apache Tika integration  
-✅ Suporte completo a português / Full Portuguese support  
-✅ Extração de entidades nomeadas / Named entity extraction  
-✅ Classificação de tópicos / Topic classification  
-✅ Busca com filtros e facetas / Faceted search  
+---
 
 ## 🗺️ Roadmap
 
+### v1.2 (Próxima / Next)
 - [ ] Análise de sentimento / Sentiment analysis
-- [ ] Suporte a mais plataformas de vídeo / More video platform support
-- [ ] Dashboard de visualização / Visualization dashboard
-- [ ] Exportação WARC / WARC format export
-- [ ] API GraphQL / GraphQL API
-- [ ] Arquivamento incremental / Incremental archiving
-- [ ] Suporte a mais idiomas / More language support
+- [ ] Exportação WARC / WARC export
+- [ ] Timeline visualization
+- [ ] Mais plataformas de vídeo / More video platforms
+- [ ] Mobile app
+
+### v2.0 (Futuro / Future)
+- [ ] Machine learning para classificação / ML classification
+- [ ] GraphQL API
+- [ ] Real-time archiving
+- [ ] Blockchain verification
+
+---
 
 ## 🤝 Contribuindo / Contributing
 
-Contribuições são bem-vindas! / Contributions are welcome!
+Contribuições são bem-vindas! / Contributions welcome!
 
-Veja [CONTRIBUTING.md](CONTRIBUTING.md) para detalhes. / See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+Veja [CONTRIBUTING.md](CONTRIBUTING.md)
+
+---
 
 ## 📝 Licença / License
 
-MIT License - veja [LICENSE](LICENSE) para detalhes. / See [LICENSE](LICENSE) for details.
+MIT License - [LICENSE](LICENSE)
+
+---
 
 ## 💬 Suporte / Support
 
 - **Issues**: [GitHub Issues](https://github.com/dodopok/ChronosArchiver/issues)
-- **Discussões / Discussions**: [GitHub Discussions](https://github.com/dodopok/ChronosArchiver/discussions)
+- **Discussões**: [GitHub Discussions](https://github.com/dodopok/ChronosArchiver/discussions)
 - **Email**: support@chronosarchiver.dev
-
-## 🚀 Agradecimentos / Acknowledgments
-
-- [Internet Archive](https://archive.org/) - Wayback Machine
-- [Meilisearch](https://www.meilisearch.com/) - Search engine
-- [Apache Tika](https://tika.apache.org/) - Content extraction
-- [spaCy](https://spacy.io/) - NLP library
-- [FastAPI](https://fastapi.tiangolo.com/) - Web framework
 
 ---
 
-**Feito com ❤️ por Douglas Araujo / Made with ❤️ by Douglas Araujo**
+## 🏆 Agradecimentos / Acknowledgments
+
+- [Internet Archive](https://archive.org/) - Wayback Machine
+- [Meilisearch](https://www.meilisearch.com/) - Search engine
+- [Apache Tika](https://tika.apache.org/) - Text extraction
+- [spaCy](https://spacy.io/) - NLP library
+- [FastAPI](https://fastapi.tiangolo.com/) - Backend framework
+- [React](https://react.dev/) - Frontend library
+- [Material-UI](https://mui.com/) - UI components
+
+---
+
+**🌟 Sistema Completo e Produção-Ready / Complete Production-Ready System 🌟**
+
+**Desenvolvido com ❤️ por Douglas Araujo**  
+**Developed with ❤️ by Douglas Araujo**
