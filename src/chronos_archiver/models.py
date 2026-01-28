@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field
 
 
 class ArchiveStatus(str, Enum):
@@ -16,6 +16,8 @@ class ArchiveStatus(str, Enum):
     DOWNLOADED = "downloaded"
     TRANSFORMING = "transforming"
     TRANSFORMED = "transformed"
+    ANALYZING = "analyzing"
+    ANALYZED = "analyzed"
     INDEXING = "indexing"
     INDEXED = "indexed"
     FAILED = "failed"
@@ -61,15 +63,63 @@ class TransformedContent(BaseModel):
     transformed_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class MediaEmbed(BaseModel):
+    """Represents a media embed (YouTube, Vimeo, etc.)."""
+
+    type: str = Field(..., description="Embed type (youtube, vimeo, etc.)")
+    url: str = Field(..., description="Original URL")
+    embed_url: str = Field(..., description="Embed URL")
+    video_id: Optional[str] = Field(None, description="Video ID")
+    platform: str = Field(..., description="Platform name")
+    title: Optional[str] = Field(None, description="Video title")
+    thumbnail: Optional[str] = Field(None, description="Thumbnail URL")
+    metadata: dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+
+
+class ContentAnalysis(BaseModel):
+    """Represents analyzed content with intelligence extraction."""
+
+    snapshot: ArchiveSnapshot
+    text_content: str = Field(..., description="Full text content")
+    languages: list[tuple[str, float]] = Field(default_factory=list, description="Detected languages with probabilities")
+    entities: dict[str, list[str]] = Field(default_factory=dict, description="Named entities by type")
+    keywords: list[str] = Field(default_factory=list, description="Extracted keywords")
+    topics: list[str] = Field(default_factory=list, description="Classified topics")
+    media_embeds: list[MediaEmbed] = Field(default_factory=list, description="Detected media embeds")
+    summary: Optional[str] = Field(None, description="Content summary")
+    word_count: int = Field(default=0, description="Word count")
+    has_images: bool = Field(default=False, description="Contains images")
+    has_videos: bool = Field(default=False, description="Contains videos")
+    metadata: dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+    analyzed_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class IndexedContent(BaseModel):
     """Represents indexed content in the archive."""
 
     id: Optional[int] = Field(None, description="Database ID")
-    snapshot: ArchiveSnapshot
+    snapshot: Optional[ArchiveSnapshot] = None
     content: str = Field(..., description="Stored content")
     text_content: Optional[str] = Field(None, description="Searchable text")
     metadata: dict[str, Any] = Field(default_factory=dict)
     indexed_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class SearchResult(BaseModel):
+    """Represents a search result."""
+
+    id: str = Field(..., description="Result ID")
+    url: str = Field(..., description="Wayback Machine URL")
+    original_url: str = Field(..., description="Original URL")
+    timestamp: str = Field(..., description="Snapshot timestamp")
+    title: str = Field(..., description="Page title")
+    snippet: str = Field(..., description="Text snippet")
+    highlights: dict[str, Any] = Field(default_factory=dict, description="Highlighted text")
+    score: float = Field(..., description="Relevance score")
+    keywords: list[str] = Field(default_factory=list, description="Keywords")
+    topics: list[str] = Field(default_factory=list, description="Topics")
+    has_videos: bool = Field(default=False, description="Contains videos")
+    media_embeds: list[dict] = Field(default_factory=list, description="Media embeds")
 
 
 class QueueMessage(BaseModel):
@@ -90,6 +140,7 @@ class ProcessingStats(BaseModel):
     discovered: int = 0
     downloaded: int = 0
     transformed: int = 0
+    analyzed: int = 0
     indexed: int = 0
     failed: int = 0
     skipped: int = 0
