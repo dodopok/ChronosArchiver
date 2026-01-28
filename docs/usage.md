@@ -1,32 +1,27 @@
 # ChronosArchiver Usage Guide
 
-Comprehensive guide for using ChronosArchiver.
+Comprehensive guide for using ChronosArchiver in various scenarios.
 
 ## Table of Contents
 
-1. [Installation](#installation)
-2. [Quick Start](#quick-start)
-3. [CLI Usage](#cli-usage)
-4. [Programmatic Usage](#programmatic-usage)
-5. [Configuration](#configuration)
-6. [Common Workflows](#common-workflows)
-7. [Troubleshooting](#troubleshooting)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Configuration](#configuration)
+- [Basic Usage](#basic-usage)
+- [Advanced Usage](#advanced-usage)
+- [CLI Reference](#cli-reference)
+- [Troubleshooting](#troubleshooting)
+- [Best Practices](#best-practices)
 
 ## Installation
 
-### Prerequisites
-
-- Python 3.8+
-- Redis (for queue management)
-- SQLite or PostgreSQL
-
-### Install from PyPI
+### From PyPI
 
 ```bash
 pip install chronos-archiver
 ```
 
-### Install from Source
+### From Source
 
 ```bash
 git clone https://github.com/dodopok/ChronosArchiver.git
@@ -34,11 +29,17 @@ cd ChronosArchiver
 pip install -e .
 ```
 
-### Development Installation
+### With Docker
 
 ```bash
-pip install -e ".[dev]"
+docker pull chronosarchiver/chronos-archiver:latest
 ```
+
+### Prerequisites
+
+- Python 3.8 or higher
+- Redis (for queue management)
+- PostgreSQL (optional, for production)
 
 ## Quick Start
 
@@ -49,172 +50,31 @@ chronos init
 ```
 
 This creates:
-- `archive/` directory
-- `logs/` directory  
+- `archive/` directory for stored content
+- `logs/` directory for log files
 - `config.yaml` configuration file
 
 ### 2. Start Redis
 
 ```bash
+# Using system Redis
 redis-server
+
+# Or with Docker
+docker run -d -p 6379:6379 redis:7-alpine
 ```
 
-### 3. Archive a URL
+### 3. Archive Your First URL
 
 ```bash
 chronos archive https://web.archive.org/web/20090430060114/http://www.dar.org.br/
 ```
 
-## CLI Usage
-
-### Archive Commands
-
-#### Archive Single URL
-
-```bash
-chronos archive <url>
-```
-
-#### Archive Multiple URLs
-
-```bash
-chronos archive <url1> <url2> <url3>
-```
-
-#### Archive from File
-
-```bash
-chronos archive --input urls.txt
-```
-
-#### Custom Configuration
-
-```bash
-chronos archive --config custom.yaml --input urls.txt
-```
-
-#### Set Worker Count
-
-```bash
-chronos archive --workers 8 --input urls.txt
-```
-
-#### Custom Output Directory
-
-```bash
-chronos archive --output /path/to/archive <url>
-```
-
-### Worker Management
-
-#### Start Workers
-
-```bash
-chronos workers start --count 4
-```
-
-#### Start with Custom Config
-
-```bash
-chronos workers start --config custom.yaml --count 8
-```
-
-### Validation
-
-#### Validate Configuration
-
-```bash
-chronos validate-config
-chronos validate-config --config custom.yaml
-```
-
-### Help
-
-```bash
-chronos --help
-chronos archive --help
-chronos workers --help
-```
-
-## Programmatic Usage
-
-### Basic Example
-
-```python
-import asyncio
-from chronos_archiver import ChronosArchiver
-from chronos_archiver.config import load_config
-
-async def main():
-    config = load_config()
-    archiver = ChronosArchiver(config)
-    
-    await archiver.archive_url(
-        'https://web.archive.org/web/20090430060114/http://www.dar.org.br/'
-    )
-    
-    await archiver.shutdown()
-
-asyncio.run(main())
-```
-
-### Multiple URLs
-
-```python
-urls = [
-    'https://web.archive.org/web/20090430060114/http://www.dar.org.br/',
-    'https://web.archive.org/web/20120302052501/http://www.dar.org.br/',
-]
-
-await archiver.archive_urls(urls)
-```
-
-### Manual Pipeline
-
-```python
-from chronos_archiver.discovery import WaybackDiscovery
-from chronos_archiver.ingestion import ContentIngestion
-from chronos_archiver.transformation import ContentTransformation
-from chronos_archiver.indexing import ContentIndexer
-
-# Initialize modules
-discovery = WaybackDiscovery(config)
-ingestion = ContentIngestion(config)
-transformation = ContentTransformation(config)
-indexer = ContentIndexer(config)
-
-# Stage 1: Discovery
-snapshots = await discovery.find_snapshots(url)
-
-# Stage 2: Ingestion
-for snapshot in snapshots:
-    downloaded = await ingestion.download(snapshot)
-    
-    # Stage 3: Transformation
-    if downloaded:
-        transformed = await transformation.transform(downloaded)
-        
-        # Stage 4: Indexing
-        if transformed:
-            await indexer.index(transformed)
-```
-
-### Search Archived Content
-
-```python
-from chronos_archiver.indexing import ContentIndexer
-
-indexer = ContentIndexer(config)
-results = await indexer.search("Diocese Anglicana", limit=10)
-
-for result in results:
-    print(f"Title: {result.metadata.get('title')}")
-    print(f"Text: {result.text_content[:200]}...")
-```
-
 ## Configuration
 
-### Configuration File Structure
+### Configuration File
+
+Edit `config.yaml`:
 
 ```yaml
 archive:
@@ -235,133 +95,309 @@ processing:
 database:
   type: "sqlite"
   sqlite_path: "./archive/chronos.db"
+
+transformation:
+  rewrite_links: true
+  extract_metadata: true
+  remove_scripts: false
 ```
 
-### Load Configuration
+### Validate Configuration
 
-```python
-from chronos_archiver.config import load_config, save_config
-
-# Load
-config = load_config('config.yaml')
-
-# Modify
-config['processing']['workers'] = 8
-
-# Save
-save_config(config, 'new_config.yaml')
+```bash
+chronos validate-config
 ```
 
-## Common Workflows
+## Basic Usage
 
-### Workflow 1: Archive Historical Snapshots
+### Archive a Single URL
+
+```bash
+chronos archive https://web.archive.org/web/20090430060114/http://www.dar.org.br/
+```
+
+### Archive Multiple URLs
+
+```bash
+# From file (one URL per line)
+chronos archive --input urls.txt
+
+# Multiple URLs as arguments
+chronos archive URL1 URL2 URL3
+```
+
+### Archive with Custom Configuration
+
+```bash
+chronos archive --config custom_config.yaml --input urls.txt
+```
+
+### Specify Output Directory
+
+```bash
+chronos archive --output /path/to/archive URL
+```
+
+### Control Worker Count
+
+```bash
+chronos archive --workers 8 --input urls.txt
+```
+
+## Advanced Usage
+
+### Background Workers
+
+Start background workers for async processing:
+
+```bash
+# Start 4 workers
+chronos workers start --count 4
+
+# In another terminal, queue URLs
+chronos archive --input urls.txt
+```
+
+### Programmatic Usage
+
+#### Simple Example
 
 ```python
-# Discover all snapshots of a URL
+import asyncio
+from chronos_archiver import ChronosArchiver
+from chronos_archiver.config import load_config
+
+async def main():
+    config = load_config()
+    archiver = ChronosArchiver(config)
+    
+    url = "https://web.archive.org/web/20090430060114/http://www.dar.org.br/"
+    await archiver.archive_url(url)
+    
+    await archiver.shutdown()
+
+asyncio.run(main())
+```
+
+#### Batch Processing
+
+```python
+import asyncio
+from chronos_archiver import ChronosArchiver
+from chronos_archiver.config import load_config
+
+async def main():
+    config = load_config()
+    archiver = ChronosArchiver(config)
+    
+    urls = [
+        "https://web.archive.org/web/20090430060114/http://www.dar.org.br/",
+        "https://web.archive.org/web/20120302052501/http://www.dar.org.br/",
+        "https://web.archive.org/web/20150406103050/http://dar.org.br/",
+    ]
+    
+    await archiver.archive_urls(urls)
+    await archiver.shutdown()
+
+asyncio.run(main())
+```
+
+#### Custom Pipeline
+
+```python
+import asyncio
 from chronos_archiver.discovery import WaybackDiscovery
+from chronos_archiver.ingestion import ContentIngestion
+from chronos_archiver.transformation import ContentTransformation
+from chronos_archiver.indexing import ContentIndexer
+from chronos_archiver.config import load_config
 
-discovery = WaybackDiscovery(config)
-snapshots = await discovery.find_snapshots('http://www.dar.org.br/')
+async def main():
+    config = load_config()
+    
+    # Initialize components
+    discovery = WaybackDiscovery(config)
+    ingestion = ContentIngestion(config)
+    transformation = ContentTransformation(config)
+    indexer = ContentIndexer(config)
+    
+    # Stage 1: Discovery
+    snapshots = await discovery.find_snapshots("http://www.dar.org.br/")
+    print(f"Found {len(snapshots)} snapshots")
+    
+    for snapshot in snapshots[:5]:  # Process first 5
+        # Stage 2: Ingestion
+        content = await ingestion.download(snapshot)
+        if not content:
+            continue
+        
+        # Stage 3: Transformation
+        transformed = await transformation.transform(content)
+        if not transformed:
+            continue
+        
+        # Stage 4: Indexing
+        indexed = await indexer.index(transformed)
+        if indexed:
+            print(f"Archived: {transformed.metadata.get('title')}")
+    
+    await indexer.close()
 
-print(f"Found {len(snapshots)} snapshots")
-
-# Archive all snapshots
-for snapshot in snapshots:
-    await archiver.archive_url(snapshot.url)
+asyncio.run(main())
 ```
 
-### Workflow 2: Batch Processing
+### Search Archived Content
 
 ```python
-# Read URLs from file
-with open('urls.txt') as f:
-    urls = [line.strip() for line in f if line.strip()]
+import asyncio
+from chronos_archiver.indexing import ContentIndexer
+from chronos_archiver.config import load_config
 
-# Process in batches
-batch_size = 10
-for i in range(0, len(urls), batch_size):
-    batch = urls[i:i+batch_size]
-    await archiver.archive_urls(batch)
-    print(f"Processed {i+len(batch)}/{len(urls)}")
+async def search():
+    config = load_config()
+    indexer = ContentIndexer(config)
+    
+    results = await indexer.search("Diocese Anglicana", limit=10)
+    
+    for result in results:
+        print(f"Title: {result.metadata.get('title')}")
+        if result.text_content:
+            print(f"Preview: {result.text_content[:100]}...\n")
+    
+    await indexer.close()
+
+asyncio.run(search())
 ```
 
-### Workflow 3: Monitor Progress
+### Discover All Snapshots
 
 ```python
-from chronos_archiver.models import ProcessingStats
-from tqdm import tqdm
+import asyncio
+from chronos_archiver.discovery import WaybackDiscovery
+from chronos_archiver.config import load_config
 
-stats = ProcessingStats(total_snapshots=len(urls))
+async def discover():
+    config = load_config()
+    discovery = WaybackDiscovery(config)
+    
+    # Find all snapshots for a URL
+    snapshots = await discovery.find_snapshots("http://www.dar.org.br/")
+    
+    print(f"Found {len(snapshots)} snapshots:\n")
+    for snapshot in snapshots:
+        print(f"{snapshot.timestamp}: {snapshot.status_code} - {snapshot.mime_type}")
 
-for url in tqdm(urls, desc="Archiving"):
-    try:
-        await archiver.archive_url(url)
-        stats.indexed += 1
-    except Exception as e:
-        stats.failed += 1
-        print(f"Failed: {url} - {e}")
-
-print(f"Success rate: {stats.success_rate:.1f}%")
+asyncio.run(discover())
 ```
 
-### Workflow 4: Custom Processing
+## CLI Reference
 
-```python
-# Custom content filter
-async def should_archive(snapshot):
-    """Only archive HTML pages from specific year."""
-    if snapshot.mime_type != 'text/html':
-        return False
-    if not snapshot.timestamp.startswith('2009'):
-        return False
-    return True
+### `chronos archive`
 
-# Apply filter
-snapshots = await discovery.find_snapshots(url)
-filtered = [s for s in snapshots if await should_archive(s)]
+Archive URLs from the Wayback Machine.
 
-for snapshot in filtered:
-    await archiver.archive_url(snapshot.url)
+**Usage**:
+```bash
+chronos archive [OPTIONS] [URLS]...
+```
+
+**Options**:
+- `--input, -i PATH`: File with URLs (one per line)
+- `--config, -c PATH`: Configuration file
+- `--workers, -w INT`: Number of workers (default: 4)
+- `--output, -o PATH`: Output directory
+
+**Examples**:
+```bash
+chronos archive URL
+chronos archive --input urls.txt --workers 8
+chronos archive --config custom.yaml URL1 URL2
+```
+
+### `chronos workers`
+
+Manage background workers.
+
+#### `chronos workers start`
+
+Start background workers.
+
+**Usage**:
+```bash
+chronos workers start [OPTIONS]
+```
+
+**Options**:
+- `--count, -c INT`: Number of workers (default: 4)
+- `--config PATH`: Configuration file
+
+**Example**:
+```bash
+chronos workers start --count 8
+```
+
+### `chronos init`
+
+Initialize a new ChronosArchiver project.
+
+**Usage**:
+```bash
+chronos init [OPTIONS]
+```
+
+**Options**:
+- `--config, -c PATH`: Custom config file path
+
+**Example**:
+```bash
+chronos init --config my_config.yaml
+```
+
+### `chronos validate-config`
+
+Validate configuration file.
+
+**Usage**:
+```bash
+chronos validate-config [OPTIONS]
+```
+
+**Options**:
+- `--config, -c PATH`: Configuration file to validate
+
+**Example**:
+```bash
+chronos validate-config --config config.yaml
 ```
 
 ## Troubleshooting
 
-### Connection Errors
+### Redis Connection Error
 
-**Problem**: `ConnectionError: Cannot connect to Redis`
+**Problem**: `Connection refused` when connecting to Redis
 
 **Solution**:
 ```bash
-# Start Redis
+# Check if Redis is running
+redis-cli ping
+# Should return: PONG
+
+# If not running, start Redis
 redis-server
 
-# Or use in-memory queuing (for testing)
-# Set in config.yaml:
-queue:
-  backend: "memory"
-```
-
-### Download Failures
-
-**Problem**: `Download failed: timeout`
-
-**Solution**:
-```yaml
-# Increase timeout in config.yaml
-processing:
-  download_timeout: 600  # 10 minutes
+# Or with Docker
+docker run -d -p 6379:6379 redis:7-alpine
 ```
 
 ### Rate Limiting
 
-**Problem**: Too many requests blocked
+**Problem**: Getting rate limited by Wayback Machine
 
-**Solution**:
+**Solution**: Adjust rate limiting in `config.yaml`:
 ```yaml
-# Reduce request rate
 processing:
-  requests_per_second: 2
-  concurrent_requests: 5
+  requests_per_second: 2  # Lower value
+  retry_delay: 10  # Increase delay
 ```
 
 ### Memory Issues
@@ -369,47 +405,224 @@ processing:
 **Problem**: Out of memory errors
 
 **Solution**:
-```yaml
-# Reduce file size limit
-archive:
-  max_file_size: 50  # MB
+1. Reduce concurrent requests:
+   ```yaml
+   processing:
+     concurrent_requests: 5
+   ```
 
-# Reduce concurrency
-processing:
-  workers: 2
-  batch_size: 5
-```
+2. Reduce batch size:
+   ```yaml
+   processing:
+     batch_size: 5
+   ```
+
+3. Enable compression:
+   ```yaml
+   indexing:
+     compress_content: true
+   ```
 
 ### Database Locked
 
-**Problem**: `database is locked` (SQLite)
+**Problem**: `database is locked` error with SQLite
 
-**Solution**:
+**Solution**: Use PostgreSQL for concurrent access:
 ```yaml
-# Use PostgreSQL for production
 database:
   type: "postgresql"
-  postgresql_url: "postgresql://user:pass@localhost/chronos"
+  postgresql_url: "postgresql://user:pass@localhost:5432/chronos"
 ```
 
-### Debug Mode
+### Import Errors
+
+**Problem**: `ModuleNotFoundError`
+
+**Solution**:
+```bash
+# Reinstall ChronosArchiver
+pip install --force-reinstall -e .
+
+# Or install from PyPI
+pip install --upgrade chronos-archiver
+```
+
+## Best Practices
+
+### 1. Start Small
+
+Test with a few URLs before large-scale archiving:
+```bash
+chronos archive --input test_urls.txt
+```
+
+### 2. Use Background Workers
+
+For large batches, use background workers:
+```bash
+# Terminal 1: Start workers
+chronos workers start --count 8
+
+# Terminal 2: Queue URLs
+chronos archive --input large_list.txt
+```
+
+### 3. Monitor Progress
+
+Check logs:
+```bash
+tail -f logs/chronos.log
+```
+
+### 4. Regular Backups
+
+Backup your archive and database:
+```bash
+tar -czf archive_backup.tar.gz archive/
+```
+
+### 5. Optimize Configuration
+
+For fast networks:
+```yaml
+processing:
+  workers: 8
+  concurrent_requests: 20
+  requests_per_second: 10
+```
+
+For slow networks:
+```yaml
+processing:
+  workers: 2
+  concurrent_requests: 5
+  requests_per_second: 2
+```
+
+### 6. Use PostgreSQL in Production
 
 ```yaml
-logging:
-  level: "DEBUG"
-  log_to_file: true
-  log_file: "./logs/debug.log"
+database:
+  type: "postgresql"
+  postgresql_url: "postgresql://user:pass@host:5432/chronos"
+  pool_size: 10
 ```
 
+### 7. Enable Compression
+
+Save disk space:
+```yaml
+indexing:
+  compress_content: true
+  compression_level: 6
+```
+
+### 8. Respect Rate Limits
+
+Avoid overwhelming the Wayback Machine:
+```yaml
+processing:
+  requests_per_second: 5  # Conservative
+  retry_delay: 5
+```
+
+### 9. Filter Content
+
+Only archive what you need:
+```yaml
+archive:
+  allowed_mime_types:
+    - "text/html"
+    - "text/css"
+    - "application/javascript"
+
+discovery:
+  filter_status_codes: [200]
+```
+
+### 10. Regular Maintenance
+
+Clean up failed entries, optimize database, check disk space.
+
+## Docker Usage
+
+### Using Docker Compose
+
+```bash
+# Start all services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f chronos
+
+# Scale workers
+docker-compose up -d --scale chronos-worker=4
+
+# Stop services
+docker-compose down
+```
+
+### Custom Docker Run
+
+```bash
+docker run -d \
+  --name chronos-redis \
+  -p 6379:6379 \
+  redis:7-alpine
+
+docker run -d \
+  --name chronos-archiver \
+  --link chronos-redis:redis \
+  -v $(pwd)/archive:/app/archive \
+  -v $(pwd)/config.yaml:/app/config.yaml:ro \
+  -e REDIS_URL=redis://redis:6379/0 \
+  chronosarchiver/chronos-archiver:latest \
+  chronos workers start --count 4
+```
+
+## Performance Tips
+
+### 1. Concurrent Processing
+
+Use `asyncio.gather()` for parallel operations:
 ```python
-# In code
-import logging
-logging.basicConfig(level=logging.DEBUG)
+await asyncio.gather(*[process(url) for url in urls])
 ```
 
----
+### 2. Connection Pooling
 
-**Need help?** Open an issue on [GitHub](https://github.com/dodopok/ChronosArchiver/issues)
+Reuse HTTP connections:
+```python
+async with aiohttp.ClientSession() as session:
+    # All requests reuse connections
+```
 
-**Last Updated**: January 2026  
-**Version**: 1.0.0
+### 3. Batch Operations
+
+Process in batches:
+```python
+for batch in chunks(items, batch_size=10):
+    await process_batch(batch)
+```
+
+### 4. Index Optimization
+
+For PostgreSQL, create indexes:
+```sql
+CREATE INDEX idx_url ON archived_pages(url);
+CREATE INDEX idx_timestamp ON archived_pages(timestamp);
+```
+
+### 5. Resource Monitoring
+
+Monitor system resources:
+```bash
+# CPU and memory
+htop
+
+# Disk I/O
+iotop
+
+# Network
+iftop
+```
