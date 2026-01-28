@@ -11,5 +11,21 @@ requests>=2.28.0
 SQLAlchemy>=2.0.0
 tqdm>=4.65.0
 
+# Intelligence and NLP
+spacy>=3.5.0
+langdetect>=1.0.9
+
+# Search engine
+meilisearch>=0.28.0
+
+# Apache Tika
+tika>=2.6.0
+
+# Web API
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+jinja2>=3.1.2
+python-multipart>=0.0.6
+
 # Optional: PostgreSQL support
 # psycopg2-binary>=2.9.0

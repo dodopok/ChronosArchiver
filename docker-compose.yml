@@ -18,6 +18,39 @@ services:
     networks:
       - chronos-network
 
+  # Meilisearch for advanced search
+  meilisearch:
+    image: getmeili/meilisearch:v1.5
+    container_name: chronos-meilisearch
+    ports:
+      - "7700:7700"
+    environment:
+      - MEILI_ENV=development
+      - MEILI_NO_ANALYTICS=true
+    volumes:
+      - meilisearch-data:/meili_data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7700/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - chronos-network
+
+  # Apache Tika for text extraction
+  tika:
+    image: apache/tika:latest
+    container_name: chronos-tika
+    ports:
+      - "9998:9998"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9998/tika"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - chronos-network
+
   # PostgreSQL (optional, for production)
   postgres:
     image: postgres:15-alpine
@@ -38,17 +71,51 @@ services:
     networks:
       - chronos-network
 
-  # ChronosArchiver application
-  chronos:
+  # ChronosArchiver Web API
+  api:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: chronos-archiver
+    container_name: chronos-api
     depends_on:
       redis:
         condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+      tika:
+        condition: service_healthy
     environment:
       - REDIS_URL=redis://redis:6379/0
+      - MEILISEARCH_HOST=http://meilisearch:7700
+      - TIKA_SERVER_URL=http://tika:9998
+      - DATABASE_TYPE=sqlite
+      - ARCHIVE_OUTPUT_DIR=/app/archive
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./archive:/app/archive
+      - ./logs:/app/logs
+      - ./config.yaml:/app/config.yaml:ro
+    networks:
+      - chronos-network
+    command: uvicorn chronos_archiver.api:app --host 0.0.0.0 --port 8000
+
+  # ChronosArchiver workers
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      redis:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+      tika:
+        condition: service_healthy
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - MEILISEARCH_HOST=http://meilisearch:7700
+      - TIKA_SERVER_URL=http://tika:9998
       - DATABASE_TYPE=sqlite
       - ARCHIVE_OUTPUT_DIR=/app/archive
     volumes:
@@ -58,31 +125,12 @@ services:
     networks:
       - chronos-network
     command: chronos workers start --count 4
-
-  # Worker nodes (scale as needed)
-  chronos-worker:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    depends_on:
-      redis:
-        condition: service_healthy
-    environment:
-      - REDIS_URL=redis://redis:6379/0
-      - DATABASE_TYPE=sqlite
-      - ARCHIVE_OUTPUT_DIR=/app/archive
-    volumes:
-      - ./archive:/app/archive
-      - ./logs:/app/logs
-      - ./config.yaml:/app/config.yaml:ro
-    networks:
-      - chronos-network
-    command: chronos workers start --count 2
     deploy:
       replicas: 2
 
 volumes:
   redis-data:
+  meilisearch-data:
   postgres-data:
 
 networks:

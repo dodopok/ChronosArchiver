@@ -135,6 +135,55 @@ indexing:
   compress_content: true
   compression_level: 6
 
+# Intelligence engine settings
+intelligence:
+  # Enable NLP processing
+  enable_nlp: true
+  
+  # Enable named entity extraction
+  enable_entity_extraction: true
+  
+  # Enable language detection
+  enable_language_detection: true
+  
+  # Enable media embed detection
+  enable_embed_detection: true
+
+# Apache Tika settings
+tika:
+  # Enable Tika integration
+  enabled: true
+  
+  # Tika server URL
+  server_url: "http://localhost:9998"
+
+# Search engine settings (Meilisearch)
+search:
+  # Meilisearch host
+  meilisearch_host: "http://localhost:7700"
+  
+  # Meilisearch API key (optional)
+  # meilisearch_api_key: "your_api_key"
+  
+  # Index name
+  index_name: "chronos_archive"
+
+# Web API settings
+api:
+  # Enable web API
+  enabled: true
+  
+  # API host and port
+  host: "0.0.0.0"
+  port: 8000
+  
+  # Enable CORS
+  enable_cors: true
+  
+  # Allowed origins for CORS
+  cors_origins:
+    - "*"
+
 # Logging configuration
 logging:
   # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
