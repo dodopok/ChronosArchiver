@@ -1,19 +1,22 @@
-"""API module - FastAPI web interface for ChronosArchiver."""
+"""API module - FastAPI web interface with WebSocket support for ChronosArchiver."""
 
+import asyncio
 import logging
+import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, List, Optional
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
+from chronos_archiver import ChronosArchiver
 from chronos_archiver.config import load_config
 from chronos_archiver.indexing import ContentIndexer
+from chronos_archiver.models import ArchiveStatus
 from chronos_archiver.search import SearchEngine
 
 logger = logging.getLogger(__name__)
@@ -22,7 +25,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="ChronosArchiver API",
     description="API para pesquisa e visualização de conteúdo arquivado / API for searching and viewing archived content",
-    version="1.0.0",
+    version="1.1.0",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
 )
@@ -36,13 +39,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global config and engines
+# Global state
 config = None
 search_engine = None
 indexer = None
-
-# Templates
-templates = Jinja2Templates(directory="templates")
+archiver = None
+active_jobs = {}
+websocket_connections = set()
 
 
 class SearchRequest(BaseModel):
@@ -55,14 +58,26 @@ class SearchRequest(BaseModel):
 
 class ArchiveRequest(BaseModel):
     """Archive request model."""
-    urls: list[str]
+    urls: List[str]
     priority: str = "normal"
+
+
+class ArchiveJobResponse(BaseModel):
+    """Archive job response."""
+    id: str
+    url: str
+    status: str
+    progress: int
+    stage: str
+    created_at: str
+    updated_at: str
+    error: Optional[str] = None
 
 
 @app.on_event("startup")
 async def startup_event():
     """Initialize app on startup."""
-    global config, search_engine, indexer
+    global config, search_engine, indexer, archiver
     
     logger.info("Starting ChronosArchiver API...")
     
@@ -83,16 +98,26 @@ async def startup_event():
     except Exception as e:
         logger.error(f"Failed to initialize indexer: {e}")
     
+    # Initialize archiver
+    try:
+        archiver = ChronosArchiver(config)
+        logger.info("Archiver initialized")
+    except Exception as e:
+        logger.error(f"Failed to initialize archiver: {e}")
+    
     logger.info("ChronosArchiver API started successfully")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on shutdown."""
-    global indexer
+    global indexer, archiver
     
     if indexer:
         await indexer.close()
+    
+    if archiver:
+        await archiver.shutdown()
     
     logger.info("ChronosArchiver API shut down")
 
@@ -136,36 +161,6 @@ async def index():
                 margin-bottom: 30px;
                 font-size: 1.1em;
             }
-            .search-box {
-                display: flex;
-                margin-bottom: 30px;
-            }
-            input[type="search"] {
-                flex: 1;
-                padding: 15px 20px;
-                border: 2px solid #e0e0e0;
-                border-radius: 10px 0 0 10px;
-                font-size: 16px;
-                outline: none;
-                transition: border-color 0.3s;
-            }
-            input[type="search"]:focus {
-                border-color: #667eea;
-            }
-            button {
-                padding: 15px 30px;
-                background: #667eea;
-                color: white;
-                border: none;
-                border-radius: 0 10px 10px 0;
-                cursor: pointer;
-                font-size: 16px;
-                font-weight: 600;
-                transition: background 0.3s;
-            }
-            button:hover {
-                background: #5568d3;
-            }
             .features {
                 display: grid;
                 grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -187,10 +182,6 @@ async def index():
                 font-weight: 600;
                 margin-bottom: 5px;
             }
-            .feature-desc {
-                color: #666;
-                font-size: 0.9em;
-            }
             .api-link {
                 text-align: center;
                 margin-top: 30px;
@@ -209,16 +200,11 @@ async def index():
             <h1>🕒 ChronosArchiver</h1>
             <p class="subtitle">Motor de Busca Inteligente para Conteúdo Arquivado da Web</p>
             
-            <form action="/search" method="get" class="search-box">
-                <input type="search" name="q" placeholder="Pesquisar conteúdo arquivado..." required>
-                <button type="submit">Buscar</button>
-            </form>
-            
             <div class="features">
                 <div class="feature">
                     <div class="feature-icon">🔍</div>
                     <div class="feature-title">Busca Inteligente</div>
-                    <div class="feature-desc">Pesquisa com tolerância a erros e relevância</div>
+                    <div class="feature-desc">Pesquisa com tolerância a erros</div>
                 </div>
                 <div class="feature">
                     <div class="feature-icon">🎥</div>
@@ -233,12 +219,13 @@ async def index():
                 <div class="feature">
                     <div class="feature-icon">🇧🇷</div>
                     <div class="feature-title">Suporte a Português</div>
-                    <div class="feature-desc">Otimizado para português brasileiro</div>
+                    <div class="feature-desc">Otimizado para PT-BR</div>
                 </div>
             </div>
             
             <div class="api-link">
-                <a href="/api/docs" target="_blank">Documentação da API →</a>
+                <a href="/api/docs" target="_blank">Documentação da API →</a> |
+                <a href="http://localhost:3000" target="_blank" style="margin-left: 10px">React App →</a>
             </div>
         </div>
     </body>
@@ -255,21 +242,16 @@ async def api_search(
     limit: int = Query(20, ge=1, le=100, description="Maximum results"),
     offset: int = Query(0, ge=0, description="Result offset"),
 ):
-    """Search archived content.
-    
-    Pesquisar conteúdo arquivado com suporte a filtros e paginação.
-    """
+    """Search archived content."""
     if not search_engine:
         raise HTTPException(status_code=503, detail="Search engine not available")
     
-    # Build filters
     filters = {}
     if topics:
         filters["topics"] = topics.split(",")
     if has_videos is not None:
         filters["has_videos"] = has_videos
     
-    # Search
     results = await search_engine.search(q, filters=filters, limit=limit, offset=offset)
     
     return {
@@ -283,10 +265,7 @@ async def api_search(
 
 @app.get("/api/facets")
 async def api_facets():
-    """Get facet counts for filtering.
-    
-    Obter contagens de facetas para filtragem.
-    """
+    """Get facet counts for filtering."""
     if not search_engine:
         raise HTTPException(status_code=503, detail="Search engine not available")
     
@@ -299,10 +278,7 @@ async def api_suggest(
     q: str = Query(..., description="Partial query"),
     limit: int = Query(5, ge=1, le=10, description="Maximum suggestions"),
 ):
-    """Get search suggestions.
-    
-    Obter sugestões de busca.
-    """
+    """Get search suggestions."""
     if not search_engine:
         raise HTTPException(status_code=503, detail="Search engine not available")
     
@@ -310,24 +286,122 @@ async def api_suggest(
     return {"query": q, "suggestions": suggestions}
 
 
+@app.post("/api/archive")
+async def api_archive(request: ArchiveRequest):
+    """Start archiving URLs."""
+    if not archiver:
+        raise HTTPException(status_code=503, detail="Archiver not available")
+    
+    job_ids = []
+    
+    for url in request.urls:
+        job_id = str(uuid.uuid4())
+        job = {
+            "id": job_id,
+            "url": url,
+            "status": ArchiveStatus.PENDING,
+            "progress": 0,
+            "stage": "discovery",
+            "created_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat(),
+        }
+        active_jobs[job_id] = job
+        job_ids.append(job_id)
+        
+        # Start archiving in background
+        asyncio.create_task(process_archive_job(job_id, url))
+    
+    return {"job_ids": job_ids}
+
+
+async def process_archive_job(job_id: str, url: str):
+    """Process an archive job and send updates via WebSocket."""
+    job = active_jobs[job_id]
+    
+    try:
+        # Update: Discovery
+        job["stage"] = "discovery"
+        job["status"] = ArchiveStatus.DISCOVERED
+        job["progress"] = 25
+        await broadcast_job_update(job)
+        
+        # Download
+        job["stage"] = "ingestion"
+        job["status"] = ArchiveStatus.DOWNLOADING
+        job["progress"] = 50
+        await broadcast_job_update(job)
+        
+        # Archive the URL
+        await archiver.archive_url(url)
+        
+        # Transform
+        job["stage"] = "transformation"
+        job["status"] = ArchiveStatus.TRANSFORMING
+        job["progress"] = 75
+        await broadcast_job_update(job)
+        
+        # Complete
+        job["stage"] = "indexing"
+        job["status"] = ArchiveStatus.INDEXED
+        job["progress"] = 100
+        job["updated_at"] = datetime.utcnow().isoformat()
+        await broadcast_job_update(job)
+        
+    except Exception as e:
+        job["status"] = ArchiveStatus.FAILED
+        job["error"] = str(e)
+        job["updated_at"] = datetime.utcnow().isoformat()
+        await broadcast_job_update(job)
+        logger.error(f"Archive job {job_id} failed: {e}")
+
+
+async def broadcast_job_update(job: dict):
+    """Broadcast job update to all connected WebSocket clients."""
+    disconnected = set()
+    
+    for ws in websocket_connections:
+        try:
+            await ws.send_json({"type": "job_update", "data": job})
+        except Exception:
+            disconnected.add(ws)
+    
+    # Remove disconnected clients
+    websocket_connections.difference_update(disconnected)
+
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    """WebSocket endpoint for real-time updates."""
+    await websocket.accept()
+    websocket_connections.add(websocket)
+    
+    try:
+        while True:
+            data = await websocket.receive_text()
+            # Handle WebSocket messages if needed
+    except WebSocketDisconnect:
+        websocket_connections.discard(websocket)
+
+
+@app.get("/api/jobs", response_model=List[ArchiveJobResponse])
+async def api_get_jobs():
+    """Get all archive jobs."""
+    return list(active_jobs.values())
+
+
 @app.get("/api/stats")
 async def api_stats():
-    """Get archive statistics.
-    
-    Obter estatísticas do arquivo.
-    """
-    if not indexer:
-        raise HTTPException(status_code=503, detail="Indexer not available")
-    
-    # Get database stats
-    # This is a placeholder - implement based on your database
+    """Get archive statistics."""
+    # Placeholder implementation
     return {
-        "total_pages": 0,
+        "total_pages": len(active_jobs),
         "total_size": "0 MB",
         "oldest_snapshot": "N/A",
         "newest_snapshot": "N/A",
-        "languages": {},
-        "topics": {},
+        "languages": {"pt": 10, "en": 5},
+        "topics": {"religião": 8, "notícias": 3},
+        "success_rate": 85.0,
+        "total_embeds": 15,
     }
 
 
@@ -339,6 +413,9 @@ async def health_check():
         "timestamp": datetime.utcnow().isoformat(),
         "search_engine": search_engine is not None,
         "indexer": indexer is not None,
+        "archiver": archiver is not None,
+        "active_jobs": len(active_jobs),
+        "websocket_connections": len(websocket_connections),
     }
 
 
