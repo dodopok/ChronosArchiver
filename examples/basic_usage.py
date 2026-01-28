@@ -2,147 +2,139 @@
 """Basic usage examples for ChronosArchiver."""
 
 import asyncio
-
 from chronos_archiver import ChronosArchiver
 from chronos_archiver.config import load_config
-from chronos_archiver.discovery import WaybackDiscovery
-from chronos_archiver.indexing import ContentIndexer
-from chronos_archiver.ingestion import ContentIngestion
-from chronos_archiver.transformation import ContentTransformation
 
 
-async def example_1_archive_single_url():
-    """Example 1: Archive a single URL."""
-    print("\n=== Example 1: Archive Single URL ===")
-
-    # Load configuration
+async def archive_single_url():
+    """Example: Archive a single URL."""
+    print("Example 1: Archive a single URL")
+    print("=" * 50)
+    
     config = load_config()
-
-    # Initialize archiver
     archiver = ChronosArchiver(config)
-
-    # Archive a URL
+    
     url = "https://web.archive.org/web/20090430060114/http://www.dar.org.br/"
+    
+    print(f"Archiving: {url}")
     await archiver.archive_url(url)
-
-    print(f"✓ Archived: {url}")
-
+    
+    print("\n✓ Archive complete!\n")
     await archiver.shutdown()
 
 
-async def example_2_archive_multiple_urls():
-    """Example 2: Archive multiple URLs."""
-    print("\n=== Example 2: Archive Multiple URLs ===")
-
+async def archive_multiple_urls():
+    """Example: Archive multiple URLs."""
+    print("Example 2: Archive multiple URLs")
+    print("=" * 50)
+    
     config = load_config()
     archiver = ChronosArchiver(config)
-
+    
     urls = [
         "https://web.archive.org/web/20090430060114/http://www.dar.org.br/",
         "https://web.archive.org/web/20120302052501/http://www.dar.org.br/",
         "https://web.archive.org/web/20150406103050/http://dar.org.br/",
     ]
-
+    
+    print(f"Archiving {len(urls)} URLs...")
     await archiver.archive_urls(urls)
-
-    print(f"✓ Archived {len(urls)} URLs")
-
+    
+    print("\n✓ All archives complete!\n")
     await archiver.shutdown()
 
 
-async def example_3_manual_pipeline():
-    """Example 3: Manually run each stage of the pipeline."""
-    print("\n=== Example 3: Manual Pipeline Execution ===")
-
+async def discover_and_archive():
+    """Example: Discover all snapshots for a URL and archive them."""
+    print("Example 3: Discover and archive all snapshots")
+    print("=" * 50)
+    
     config = load_config()
-
-    # Initialize each stage
-    discovery = WaybackDiscovery(config)
-    ingestion = ContentIngestion(config)
-    transformation = ContentTransformation(config)
-    indexer = ContentIndexer(config)
-
-    # Stage 1: Discovery
-    print("Stage 1: Discovery...")
-    url = "https://web.archive.org/web/20090430060114/http://www.dar.org.br/"
-    snapshots = await discovery.find_snapshots(url)
-    print(f"  Found {len(snapshots)} snapshots")
-
-    for snapshot in snapshots[:1]:  # Process first snapshot only
-        # Stage 2: Ingestion
-        print("\nStage 2: Ingestion...")
-        downloaded = await ingestion.download(snapshot)
-        if not downloaded:
-            print("  Download failed")
+    archiver = ChronosArchiver(config)
+    
+    # Discover all snapshots
+    print("Discovering snapshots for http://www.dar.org.br/...")
+    snapshots = await archiver.discovery.find_snapshots("http://www.dar.org.br/")
+    
+    print(f"Found {len(snapshots)} snapshots")
+    
+    # Archive each snapshot
+    for i, snapshot in enumerate(snapshots[:5], 1):  # Limit to first 5
+        print(f"\n[{i}/{min(5, len(snapshots))}] Archiving: {snapshot.timestamp}")
+        
+        # Download
+        content = await archiver.ingestion.download(snapshot)
+        if not content:
+            print("  ✗ Download failed")
             continue
-        print(f"  Downloaded {len(downloaded.content)} bytes")
-
-        # Stage 3: Transformation
-        print("\nStage 3: Transformation...")
-        transformed = await transformation.transform(downloaded)
+        
+        # Transform
+        transformed = await archiver.transformation.transform(content)
         if not transformed:
-            print("  Transformation failed")
+            print("  ✗ Transformation failed")
             continue
-        print(f"  Extracted metadata: {transformed.metadata.get('title', 'No title')}")
-
-        # Stage 4: Indexing
-        print("\nStage 4: Indexing...")
-        indexed = await indexer.index(transformed)
+        
+        # Index
+        indexed = await archiver.indexer.index(transformed)
         if indexed:
-            print(f"  Indexed with ID: {indexed.id}")
+            print(f"  ✓ Successfully archived: {transformed.metadata.get('title', 'No title')}")
+    
+    print("\n✓ Discovery and archival complete!\n")
+    await archiver.shutdown()
 
-    await indexer.close()
-    print("\n✓ Pipeline complete")
 
-
-async def example_4_search_archived_content():
-    """Example 4: Search archived content."""
-    print("\n=== Example 4: Search Archived Content ===")
-
+async def search_archived_content():
+    """Example: Search archived content."""
+    print("Example 4: Search archived content")
+    print("=" * 50)
+    
     config = load_config()
-    indexer = ContentIndexer(config)
-
+    archiver = ChronosArchiver(config)
+    
     # Search for content
-    query = "DAR"
-    results = await indexer.search(query, limit=10)
-
-    print(f"Found {len(results)} results for '{query}'")
-    for i, result in enumerate(results[:5], 1):
+    query = "Diocese Anglicana"
+    print(f"Searching for: '{query}'")
+    
+    results = await archiver.indexer.search(query, limit=10)
+    
+    print(f"\nFound {len(results)} results:\n")
+    for i, result in enumerate(results, 1):
         title = result.metadata.get("title", "No title")
-        print(f"  {i}. {title}")
+        print(f"{i}. {title}")
+        if result.text_content:
+            preview = result.text_content[:100] + "..."
+            print(f"   {preview}\n")
+    
+    await archiver.shutdown()
 
-    await indexer.close()
 
-
-async def example_5_discover_from_original_url():
-    """Example 5: Discover all snapshots for an original URL."""
-    print("\n=== Example 5: Discover Snapshots ===")
-
-    config = load_config()
-    discovery = WaybackDiscovery(config)
-
-    # Find all snapshots of the original URL
-    original_url = "http://www.dar.org.br/"
-    snapshots = await discovery.find_snapshots(original_url)
-
-    print(f"Found {len(snapshots)} snapshots for {original_url}")
-    for snapshot in snapshots[:10]:  # Show first 10
-        from chronos_archiver.utils import format_timestamp
-        dt = format_timestamp(snapshot.timestamp)
-        print(f"  - {dt.strftime('%Y-%m-%d %H:%M:%S')}: {snapshot.url}")
+async def main():
+    """Run all examples."""
+    examples = [
+        archive_single_url,
+        archive_multiple_urls,
+        discover_and_archive,
+        search_archived_content,
+    ]
+    
+    print("\n" + "=" * 60)
+    print("ChronosArchiver - Basic Usage Examples")
+    print("=" * 60 + "\n")
+    
+    for i, example in enumerate(examples, 1):
+        print(f"\nRunning example {i}/{len(examples)}...\n")
+        try:
+            await example()
+        except Exception as e:
+            print(f"\n✗ Example failed: {e}\n")
+        
+        if i < len(examples):
+            input("Press Enter to continue to next example...")
+    
+    print("\n" + "=" * 60)
+    print("All examples complete!")
+    print("=" * 60 + "\n")
 
 
 if __name__ == "__main__":
-    # Run examples
-    print("ChronosArchiver - Basic Usage Examples")
-    print("=======================================")
-
-    # Uncomment the examples you want to run:
-
-    # asyncio.run(example_1_archive_single_url())
-    # asyncio.run(example_2_archive_multiple_urls())
-    # asyncio.run(example_3_manual_pipeline())
-    # asyncio.run(example_4_search_archived_content())
-    asyncio.run(example_5_discover_from_original_url())
-
-    print("\n✓ Examples complete!")
+    asyncio.run(main())

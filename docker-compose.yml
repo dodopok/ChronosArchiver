@@ -1,0 +1,90 @@
+version: '3.8'
+
+services:
+  # Redis for queue management
+  redis:
+    image: redis:7-alpine
+    container_name: chronos-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - chronos-network
+
+  # PostgreSQL (optional, for production)
+  postgres:
+    image: postgres:15-alpine
+    container_name: chronos-postgres
+    environment:
+      POSTGRES_DB: chronos
+      POSTGRES_USER: chronos
+      POSTGRES_PASSWORD: chronos_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chronos"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - chronos-network
+
+  # ChronosArchiver application
+  chronos:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chronos-archiver
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_TYPE=sqlite
+      - ARCHIVE_OUTPUT_DIR=/app/archive
+    volumes:
+      - ./archive:/app/archive
+      - ./logs:/app/logs
+      - ./config.yaml:/app/config.yaml:ro
+    networks:
+      - chronos-network
+    command: chronos workers start --count 4
+
+  # Worker nodes (scale as needed)
+  chronos-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_TYPE=sqlite
+      - ARCHIVE_OUTPUT_DIR=/app/archive
+    volumes:
+      - ./archive:/app/archive
+      - ./logs:/app/logs
+      - ./config.yaml:/app/config.yaml:ro
+    networks:
+      - chronos-network
+    command: chronos workers start --count 2
+    deploy:
+      replicas: 2
+
+volumes:
+  redis-data:
+  postgres-data:
+
+networks:
+  chronos-network:
+    driver: bridge

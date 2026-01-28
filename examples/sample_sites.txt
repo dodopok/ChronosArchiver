@@ -1,13 +1,13 @@
-# ChronosArchiver Sample Sites
-# Diocese Anglicana do Recife (DAR) - Historical snapshots
+# Sample Wayback Machine URLs for ChronosArchiver
+# These are real archived pages that can be used for testing and demonstration
 
+# Diocese Anglicana do Recife (DAR) - Historical snapshots
 https://web.archive.org/web/20090430060114/http://www.dar.org.br/
 https://web.archive.org/web/20120302052501/http://www.dar.org.br/
 https://web.archive.org/web/20150406103050/http://dar.org.br/
 https://web.archive.org/web/20101223085644/http://dar.ieab.org.br/
 
 # Igreja Episcopal Anglicana do Brasil (IEAB) - Historical snapshots
-
 https://web.archive.org/web/20041022131803fw_/http://www.ieabrecife.com.br/
 https://web.archive.org/web/20050829171410fw_/http://www.ieabweb.org.br/
 https://web.archive.org/web/20051125104316fw_/http://www.ieabweb.org.br/dar/

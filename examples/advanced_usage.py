@@ -3,208 +3,223 @@
 
 import asyncio
 from pathlib import Path
-
 from chronos_archiver import ChronosArchiver
-from chronos_archiver.config import load_config, save_config
+from chronos_archiver.config import load_config
 from chronos_archiver.models import ProcessingStats
-from chronos_archiver.queue_manager import QueueManager
-from chronos_archiver.utils import setup_logging
+import logging
+
+logging.basicConfig(level=logging.INFO)
 
 
-async def example_1_custom_configuration():
-    """Example 1: Use custom configuration."""
-    print("\n=== Example 1: Custom Configuration ===")
-
-    # Create custom config
-    config = {
-        "archive": {
-            "output_dir": "./my_archive",
-            "user_agent": "MyCustomArchiver/1.0",
-            "max_file_size": 50,  # 50 MB
-        },
-        "processing": {
-            "workers": 8,
-            "batch_size": 20,
-            "requests_per_second": 10,
-        },
-        "database": {
-            "type": "sqlite",
-            "sqlite_path": "./my_archive/custom.db",
-        },
-    }
-
-    # Save configuration
-    save_config(config, "my_config.yaml")
-    print("✓ Created custom configuration")
-
-    # Load and use it
-    loaded_config = load_config("my_config.yaml")
-    archiver = ChronosArchiver(loaded_config)
-
-    print(f"  Output dir: {loaded_config['archive']['output_dir']}")
-    print(f"  Workers: {loaded_config['processing']['workers']}")
-
-
-async def example_2_batch_processing():
-    """Example 2: Batch process URLs from file."""
-    print("\n=== Example 2: Batch Processing ===")
-
+async def batch_archiving_with_progress():
+    """Example: Batch archiving with progress tracking."""
+    print("Example 1: Batch archiving with progress tracking")
+    print("=" * 50)
+    
     config = load_config()
     archiver = ChronosArchiver(config)
-
-    # Read URLs from file
+    
+    # Load URLs from file
     urls_file = Path("examples/sample_sites.txt")
+    urls = []
+    
     if urls_file.exists():
-        urls = []
         with open(urls_file) as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#"):
-                    urls.append(line)
-
-        print(f"Processing {len(urls)} URLs from file...")
-
-        # Process in batches
-        batch_size = 3
-        for i in range(0, len(urls), batch_size):
-            batch = urls[i:i+batch_size]
-            print(f"\nBatch {i//batch_size + 1}:")
-            await archiver.archive_urls(batch)
-            print(f"  ✓ Completed {len(batch)} URLs")
-
-        await archiver.shutdown()
-    else:
-        print(f"  Sample sites file not found: {urls_file}")
-
-
-async def example_3_queue_based_processing():
-    """Example 3: Queue-based async processing."""
-    print("\n=== Example 3: Queue-based Processing ===")
-
-    config = load_config()
-    queue_manager = QueueManager(config)
-
-    # Connect to queue
-    await queue_manager.connect()
-
-    # Enqueue some tasks
-    urls = [
-        "https://web.archive.org/web/20090430060114/http://www.dar.org.br/",
-        "https://web.archive.org/web/20120302052501/http://www.dar.org.br/",
-    ]
-
-    for url in urls:
-        await queue_manager.enqueue(
-            "discovery",
-            "discover_url",
-            {"url": url}
-        )
-
-    print(f"✓ Enqueued {len(urls)} tasks")
-
-    # Check queue size
-    size = await queue_manager.queue_size("discovery")
-    print(f"  Discovery queue size: {size}")
-
-    await queue_manager.disconnect()
-
-
-async def example_4_error_handling_and_retries():
-    """Example 4: Error handling with retries."""
-    print("\n=== Example 4: Error Handling ===")
-
-    config = load_config()
-    config["processing"]["retry_attempts"] = 5
-    config["processing"]["retry_delay"] = 2
-
-    archiver = ChronosArchiver(config)
-
-    # Try to archive a potentially problematic URL
-    url = "https://web.archive.org/web/20000101000000/http://invalid-url.example/"
-
-    try:
-        await archiver.archive_url(url)
-        print("✓ Archive successful")
-    except Exception as e:
-        print(f"✗ Archive failed: {e}")
-        print("  This is expected for invalid URLs")
-
+            urls = [line.strip() for line in f if line.strip() and not line.startswith("#")]
+    
+    print(f"Loaded {len(urls)} URLs from {urls_file}")
+    
+    # Track statistics
+    stats = ProcessingStats(total_snapshots=len(urls))
+    
+    for i, url in enumerate(urls, 1):
+        print(f"\n[{i}/{len(urls)}] Processing: {url}")
+        
+        try:
+            # Discover
+            snapshots = await archiver.discovery.find_snapshots(url)
+            stats.discovered += len(snapshots)
+            
+            for snapshot in snapshots[:1]:  # Process first snapshot only
+                # Download
+                content = await archiver.ingestion.download(snapshot)
+                if content:
+                    stats.downloaded += 1
+                    
+                    # Transform
+                    transformed = await archiver.transformation.transform(content)
+                    if transformed:
+                        stats.transformed += 1
+                        
+                        # Index
+                        indexed = await archiver.indexer.index(transformed)
+                        if indexed:
+                            stats.indexed += 1
+                            print(f"  ✓ Success: {transformed.metadata.get('title', 'No title')}")
+                    else:
+                        stats.failed += 1
+                else:
+                    stats.failed += 1
+        except Exception as e:
+            print(f"  ✗ Error: {e}")
+            stats.failed += 1
+    
+    # Print final statistics
+    print("\n" + "=" * 50)
+    print("Processing Statistics:")
+    print(f"  Total URLs: {stats.total_snapshots}")
+    print(f"  Discovered: {stats.discovered}")
+    print(f"  Downloaded: {stats.downloaded}")
+    print(f"  Transformed: {stats.transformed}")
+    print(f"  Indexed: {stats.indexed}")
+    print(f"  Failed: {stats.failed}")
+    print(f"  Success Rate: {stats.success_rate:.1f}%")
+    print("=" * 50)
+    
     await archiver.shutdown()
 
 
-async def example_5_monitoring_progress():
-    """Example 5: Monitor processing progress."""
-    print("\n=== Example 5: Progress Monitoring ===")
-
+async def custom_transformation():
+    """Example: Custom content transformation."""
+    print("\nExample 2: Custom content transformation")
+    print("=" * 50)
+    
     config = load_config()
+    
+    # Customize transformation settings
+    config["transformation"]["remove_scripts"] = True
+    config["transformation"]["remove_comments"] = True
+    config["transformation"]["extract_text"] = True
+    
     archiver = ChronosArchiver(config)
+    
+    url = "https://web.archive.org/web/20090430060114/http://www.dar.org.br/"
+    
+    snapshots = await archiver.discovery.find_snapshots(url)
+    if not snapshots:
+        print("No snapshots found")
+        return
+    
+    snapshot = snapshots[0]
+    content = await archiver.ingestion.download(snapshot)
+    
+    if content:
+        transformed = await archiver.transformation.transform(content)
+        
+        if transformed:
+            print(f"\nTransformed content:")
+            print(f"  Title: {transformed.metadata.get('title')}")
+            print(f"  Links found: {len(transformed.links)}")
+            print(f"  Text length: {len(transformed.text_content or '')} characters")
+            print(f"  Metadata: {list(transformed.metadata.keys())}")
+    
+    await archiver.shutdown()
 
-    # Initialize stats
-    stats = ProcessingStats()
 
+async def parallel_processing():
+    """Example: Parallel processing with multiple workers."""
+    print("\nExample 3: Parallel processing")
+    print("=" * 50)
+    
+    config = load_config()
+    config["processing"]["workers"] = 4
+    config["processing"]["concurrent_requests"] = 10
+    
+    archiver = ChronosArchiver(config)
+    
     urls = [
         "https://web.archive.org/web/20090430060114/http://www.dar.org.br/",
         "https://web.archive.org/web/20120302052501/http://www.dar.org.br/",
         "https://web.archive.org/web/20150406103050/http://dar.org.br/",
     ]
-
-    stats.total_snapshots = len(urls)
-
-    for i, url in enumerate(urls, 1):
-        print(f"\nProcessing {i}/{len(urls)}: {url}")
-        try:
-            await archiver.archive_url(url)
-            stats.indexed += 1
-            print(f"  ✓ Success (Total: {stats.indexed}/{stats.total_snapshots})")
-        except Exception as e:
-            stats.failed += 1
-            print(f"  ✗ Failed: {e}")
-
-    # Calculate success rate
-    print(f"\nFinal Stats:")
-    print(f"  Total: {stats.total_snapshots}")
-    print(f"  Successful: {stats.indexed}")
-    print(f"  Failed: {stats.failed}")
-    print(f"  Success Rate: {stats.success_rate:.1f}%")
-
+    
+    print(f"Processing {len(urls)} URLs in parallel...")
+    
+    # Process all URLs concurrently
+    await archiver.archive_urls(urls)
+    
+    print("\n✓ Parallel processing complete!")
     await archiver.shutdown()
 
 
-async def example_6_filtering_content():
-    """Example 6: Filter content by MIME type."""
-    print("\n=== Example 6: Content Filtering ===")
-
+async def filtered_discovery():
+    """Example: Discovery with filtering."""
+    print("\nExample 4: Filtered discovery")
+    print("=" * 50)
+    
     config = load_config()
-
-    # Only archive HTML and CSS
-    config["archive"]["allowed_mime_types"] = [
-        "text/html",
-        "text/css",
-    ]
-
+    
+    # Only get successful responses
+    config["discovery"]["filter_status_codes"] = [200]
+    # Enable deduplication
+    config["discovery"]["deduplicate_snapshots"] = True
+    
     archiver = ChronosArchiver(config)
-
-    print("Configured to only archive HTML and CSS files")
-    print(f"  Allowed types: {config['archive']['allowed_mime_types']}")
-
-    # This would filter out images, JavaScript, etc.
-    url = "https://web.archive.org/web/20090430060114/http://www.dar.org.br/"
-    await archiver.archive_url(url)
-
+    
+    print("Discovering snapshots with filters:")
+    print("  - Status codes: 200 only")
+    print("  - Deduplication: enabled\n")
+    
+    snapshots = await archiver.discovery.find_snapshots("http://www.dar.org.br/")
+    
+    print(f"\nFound {len(snapshots)} unique snapshots:")
+    for snapshot in snapshots[:10]:  # Show first 10
+        print(f"  - {snapshot.timestamp}: {snapshot.original_url}")
+    
     await archiver.shutdown()
+
+
+async def export_to_warc():
+    """Example: Export archived content (placeholder for WARC export)."""
+    print("\nExample 5: Export functionality")
+    print("=" * 50)
+    
+    config = load_config()
+    archiver = ChronosArchiver(config)
+    
+    print("Searching for archived content...")
+    results = await archiver.indexer.search("Diocese", limit=5)
+    
+    print(f"\nFound {len(results)} archived pages")
+    print("\nNote: WARC export is planned for future release")
+    print("Current exports available:")
+    print("  - HTML files (organized by date)")
+    print("  - SQLite database with metadata")
+    print("  - Full-text search index")
+    
+    await archiver.shutdown()
+
+
+async def main():
+    """Run all advanced examples."""
+    examples = [
+        batch_archiving_with_progress,
+        custom_transformation,
+        parallel_processing,
+        filtered_discovery,
+        export_to_warc,
+    ]
+    
+    print("\n" + "=" * 60)
+    print("ChronosArchiver - Advanced Usage Examples")
+    print("=" * 60 + "\n")
+    
+    for i, example in enumerate(examples, 1):
+        print(f"\nRunning example {i}/{len(examples)}...\n")
+        try:
+            await example()
+        except Exception as e:
+            print(f"\n✗ Example failed: {e}\n")
+            import traceback
+            traceback.print_exc()
+        
+        if i < len(examples):
+            input("\nPress Enter to continue to next example...")
+    
+    print("\n" + "=" * 60)
+    print("All examples complete!")
+    print("=" * 60 + "\n")
 
 
 if __name__ == "__main__":
-    print("ChronosArchiver - Advanced Usage Examples")
-    print("==========================================")
-
-    # Run examples (uncomment to execute)
-
-    # asyncio.run(example_1_custom_configuration())
-    # asyncio.run(example_2_batch_processing())
-    # asyncio.run(example_3_queue_based_processing())
-    # asyncio.run(example_4_error_handling_and_retries())
-    asyncio.run(example_5_monitoring_progress())
-    # asyncio.run(example_6_filtering_content())
-
-    print("\n✓ Advanced examples complete!")
+    asyncio.run(main())
