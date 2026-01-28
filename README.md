@@ -1,71 +1,55 @@
 # ChronosArchiver
 
-> An archival system to download and preserve websites from the Internet Archive's Wayback Machine
+> Sistema de arquivamento inteligente para preservar e analisar sites da Wayback Machine  
+> Intelligent archival system to download and analyze websites from the Internet Archive's Wayback Machine
 
 [![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-## Overview
+## 🌟 Recursos Principais / Key Features
 
-ChronosArchiver is a robust, production-ready system for downloading, transforming, and preserving archived websites from the Internet Archive's Wayback Machine. It implements a 4-stage asynchronous pipeline designed to handle large-scale archival operations efficiently.
+### 📦 Pipeline de 4 Estágios / 4-Stage Pipeline
+- **Discovery**: Integração com CDX API para encontrar URLs / CDX API integration
+- **Ingestion**: Download assíncrono com retry / Async downloading with retry
+- **Transformation**: Reescrita de links e extração de metadados / Link rewriting and metadata extraction
+- **Indexing**: Armazenamento e busca / Storage and search
 
-## Architecture
+### 🧠 Motor de Inteligência / Intelligence Engine
+- **Detecção de Idiomas** / Language Detection
+- **Extração de Entidades Nomeadas** (pessoas, organizações, locais) / Named Entity Extraction
+- **Extração de Palavras-Chave** / Keyword Extraction  
+- **Classificação de Tópicos** / Topic Classification
+- **Análise de Sentimento** / Sentiment Analysis
 
-The system is built around a 4-stage pipeline:
+### 🎥 Detecção de Embeds / Embed Detection
+- **YouTube** - Detecção automática de vídeos / Automatic video detection
+- **Vimeo** - Extração de embeds / Embed extraction
+- **Dailymotion** - Suporte completo / Full support
+- **SoundCloud** - Áudio embeds / Audio embeds
+- **Iframes Genéricos** / Generic iframes
 
-```
-┌───────────┐     ┌────────────┐     ┌──────────────────┐     ┌──────────┐
-│ Discovery │ --> │ Ingestion  │ --> │ Transformation   │ --> │ Indexing │
-│  (CDX API)│     │ (Download) │     │ (Link Rewriting) │     │ (Storage)│
-└───────────┘     └────────────┘     └──────────────────┘     └──────────┘
-       ↓                ↓                     ↓                      ↓
-   [Queue 1]        [Queue 2]             [Queue 3]            [Database]
-```
+### 🔍 Busca Avançada / Advanced Search
+- **Meilisearch Integration** - Busca instantânea / Instant search
+- **Tolerância a Erros** / Typo tolerance
+- **Busca com Filtros** / Faceted search
+- **Destaque de Resultados** / Result highlighting
+- **Sugestões Automáticas** / Auto-suggestions
 
-### Stage 1: Discovery
-- Queries the Wayback Machine CDX API to find all captured URLs
-- Identifies snapshots, timestamps, and MIME types
-- Filters and validates URLs for processing
-- Outputs: URL metadata to ingestion queue
+### 🌎 Interface Web / Web Interface
+- **FastAPI** - API RESTful moderna / Modern RESTful API
+- **Interface de Busca** / Search interface
+- **Visualização de Embeds** / Embed viewing
+- **Estatísticas** / Statistics dashboard
+- **Suporte Bilingual** / Bilingual support (PT/EN)
 
-### Stage 2: Ingestion
-- Downloads content from Wayback Machine
-- Sanitizes and validates downloaded data
-- Handles retries and error recovery
-- Outputs: Raw content to transformation queue
+### 📑 Extração Avançada / Advanced Extraction
+- **Apache Tika** - Extração de PDF, Office, imagens / PDF, Office, image extraction
+- **OCR** - Reconhecimento de texto em imagens / Text recognition in images
+- **Metadados** - Autor, data de criação, etc / Author, creation date, etc.
 
-### Stage 3: Transformation
-- Rewrites links to point to local archived versions
-- Extracts metadata (titles, dates, authors)
-- Normalizes HTML/CSS structure
-- Outputs: Transformed content to indexing queue
+## 🚀 Quick Start
 
-### Stage 4: Indexing
-- Stores content in structured format
-- Creates searchable index
-- Maintains URL mappings and relationships
-- Outputs: Searchable archive database
-
-## Features
-
-- ✅ **Asynchronous Processing**: Built with `asyncio` and `aiohttp` for high performance
-- ✅ **Message Queue System**: Redis/RabbitMQ integration for distributed processing
-- ✅ **Configurable Pipeline**: YAML-based configuration for all stages
-- ✅ **Robust Error Handling**: Automatic retries, logging, and failure recovery
-- ✅ **CLI Interface**: Easy-to-use command-line tools
-- ✅ **Extensible Design**: Plugin architecture for custom processors
-- ✅ **Comprehensive Testing**: Unit and integration tests included
-- ✅ **Production Ready**: Logging, monitoring, and deployment support
-
-## Installation
-
-### Prerequisites
-
-- Python 3.8 or higher
-- Redis (for queue management)
-- SQLite/PostgreSQL (for indexing)
-
-### Basic Installation
+### Instalação / Installation
 
 ```bash
 # Clone the repository
@@ -74,222 +58,406 @@ cd ChronosArchiver
 
 # Create virtual environment
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate  # Windows: venv\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt
+
+# Install language models
+python -m spacy download pt_core_news_sm  # Portuguese
+python -m spacy download xx_ent_wiki_sm   # Multilingual
 
 # Install in development mode
 pip install -e .
 ```
 
-### Production Installation
+### Iniciar Serviços / Start Services
 
 ```bash
-pip install chronos-archiver
+# Start all services with Docker Compose
+docker-compose up -d
+
+# Services started:
+# - Redis (port 6379) - Message queues
+# - Meilisearch (port 7700) - Search engine
+# - Apache Tika (port 9998) - Text extraction
+# - ChronosArchiver API (port 8000) - Web interface
+# - Workers - Background processing
 ```
 
-## Quick Start
-
-### 1. Configure the System
-
-Create a `config.yaml` file (or copy from `config.yaml.example`):
-
-```yaml
-archive:
-  output_dir: "./archive"
-  user_agent: "ChronosArchiver/1.0"
-  
-queue:
-  backend: "redis"
-  redis_url: "redis://localhost:6379"
-  
-processing:
-  workers: 4
-  batch_size: 10
-  retry_attempts: 3
-```
-
-### 2. Basic Usage
+### Usar / Usage
 
 ```bash
 # Archive a single URL
 chronos archive https://web.archive.org/web/20090430060114/http://www.dar.org.br/
 
-# Archive from a list of URLs
-chronos archive --input examples/sample_sites.txt
+# Archive from file
+chronos archive --input examples/sample_sites.txt --workers 8
 
-# Run with specific configuration
-chronos archive --config config.yaml --input urls.txt
-
-# Start processing workers
-chronos workers start --count 4
+# Start web interface
+uvicorn chronos_archiver.api:app --host 0.0.0.0 --port 8000
 ```
 
-### 3. Programmatic Usage
+Acesse / Access: **http://localhost:8000**
+
+## 📚 Documentação / Documentation
+
+- **[Guia de Uso / Usage Guide](docs/usage.md)** - Como usar o sistema / How to use
+- **[Motor de Inteligência / Intelligence Engine](docs/INTELLIGENCE.md)** - Recursos avançados / Advanced features
+- **[Arquitetura / Architecture](docs/architecture.md)** - Design do sistema / System design
+- **[API Reference](docs/api.md)** - Referência completa / Complete reference
+
+## 💻 Uso Programático / Programmatic Usage
+
+### Exemplo Básico / Basic Example
 
 ```python
+import asyncio
 from chronos_archiver import ChronosArchiver
 from chronos_archiver.config import load_config
 
-# Initialize archiver
-config = load_config('config.yaml')
-archiver = ChronosArchiver(config)
+async def main():
+    config = load_config()
+    archiver = ChronosArchiver(config)
+    
+    # Archive URL
+    await archiver.archive_url(
+        'https://web.archive.org/web/20090430060114/http://www.dar.org.br/'
+    )
+    
+    await archiver.shutdown()
 
-# Archive a URL
-await archiver.archive_url(
-    'https://web.archive.org/web/20090430060114/http://www.dar.org.br/'
+asyncio.run(main())
+```
+
+### Com Análise de Inteligência / With Intelligence Analysis
+
+```python
+from chronos_archiver.intelligence import IntelligenceEngine
+from chronos_archiver.search import SearchEngine
+
+# Initialize engines
+intelligence = IntelligenceEngine(config)
+search = SearchEngine(config)
+
+# Process content
+snapshots = await archiver.discovery.find_snapshots(url)
+for snapshot in snapshots:
+    downloaded = await archiver.ingestion.download(snapshot)
+    transformed = await archiver.transformation.transform(downloaded)
+    
+    # Analyze with intelligence engine
+    analysis = await intelligence.analyze(transformed)
+    
+    print(f"Languages: {analysis.languages}")
+    print(f"Keywords: {analysis.keywords}")
+    print(f"Topics: {analysis.topics}")
+    print(f"Entities: {analysis.entities}")
+    print(f"Media embeds: {len(analysis.media_embeds)}")
+    
+    # Index in search engine
+    await search.index_content(analysis)
+
+# Search archived content
+results = await search.search("diocese anglicana", limit=10)
+for result in results:
+    print(f"{result.title} - {result.url}")
+```
+
+### Detecção de Embeds / Embed Detection
+
+```python
+# Analyze content for media embeds
+analysis = await intelligence.analyze(transformed)
+
+for embed in analysis.media_embeds:
+    if embed.type == "youtube":
+        print(f"YouTube Video: {embed.video_id}")
+        print(f"  URL: {embed.url}")
+        print(f"  Embed: {embed.embed_url}")
+    elif embed.type == "vimeo":
+        print(f"Vimeo Video: {embed.video_id}")
+```
+
+## 🌐 Interface Web / Web Interface
+
+### Página Principal / Home Page
+
+![ChronosArchiver Web Interface](https://via.placeholder.com/800x400.png?text=ChronosArchiver+Web+Interface)
+
+### Endpoints da API / API Endpoints
+
+#### Buscar / Search
+```bash
+curl "http://localhost:8000/api/search?q=diocese&topics=religião&limit=20"
+```
+
+#### Obter Facetas / Get Facets
+```bash
+curl "http://localhost:8000/api/facets"
+```
+
+#### Sugestões / Suggestions
+```bash
+curl "http://localhost:8000/api/suggest?q=igr"
+```
+
+#### Estatísticas / Statistics
+```bash
+curl "http://localhost:8000/api/stats"
+```
+
+### Documentação Interativa / Interactive Documentation
+
+- **Swagger UI**: http://localhost:8000/api/docs
+- **ReDoc**: http://localhost:8000/api/redoc
+
+## ⚙️ Configuração / Configuration
+
+Edite `config.yaml`:
+
+```yaml
+# Intelligence engine
+intelligence:
+  enable_nlp: true
+  enable_entity_extraction: true
+  enable_language_detection: true
+  enable_embed_detection: true
+
+# Apache Tika
+tika:
+  enabled: true
+  server_url: "http://localhost:9998"
+
+# Meilisearch
+search:
+  meilisearch_host: "http://localhost:7700"
+  index_name: "chronos_archive"
+
+# Web API
+api:
+  enabled: true
+  host: "0.0.0.0"
+  port: 8000
+  enable_cors: true
+
+# Processing
+processing:
+  workers: 4
+  requests_per_second: 5
+  retry_attempts: 3
+```
+
+## 📦 Sites de Exemplo / Sample Sites
+
+O projeto inclui URLs de exemplo para teste: / The project includes sample URLs for testing:
+
+```
+# Diocese Anglicana do Recife (DAR)
+https://web.archive.org/web/20090430060114/http://www.dar.org.br/
+https://web.archive.org/web/20120302052501/http://www.dar.org.br/
+https://web.archive.org/web/20150406103050/http://dar.org.br/
+https://web.archive.org/web/20101223085644/http://dar.ieab.org.br/
+
+# Igreja Episcopal Anglicana do Brasil (IEAB)
+https://web.archive.org/web/20041022131803fw_/http://www.ieabrecife.com.br/
+https://web.archive.org/web/20050829171410fw_/http://www.ieabweb.org.br/
+https://web.archive.org/web/20051125104316fw_/http://www.ieabweb.org.br/dar/
+```
+
+## 🔧 Recursos Avançados / Advanced Features
+
+### Extração com Apache Tika / Extraction with Apache Tika
+
+```python
+from chronos_archiver.tika import TikaExtractor
+
+extractor = TikaExtractor(config)
+result = extractor.extract_text(pdf_content)
+
+print(result['text'])  # Extracted text
+print(result['metadata'])  # Author, date, etc.
+```
+
+### Busca Avançada / Advanced Search
+
+```python
+# Search with filters
+results = await search.search(
+    "igreja",
+    filters={
+        "topics": ["religião", "comunidade"],
+        "languages": ["pt"],
+        "has_videos": True
+    },
+    limit=50,
+    offset=0
 )
 
-# Archive multiple URLs
+# Get facet counts
+facets = await search.get_facets()
+print(facets['topics'])  # Topic distribution
+print(facets['languages'])  # Language distribution
+```
+
+### Processamento em Lote / Batch Processing
+
+```python
+# Process multiple URLs concurrently
 urls = [
-    'https://web.archive.org/web/20120302052501/http://www.dar.org.br/',
-    'https://web.archive.org/web/20150406103050/http://dar.org.br/',
+    "https://web.archive.org/web/20090430060114/http://www.dar.org.br/",
+    "https://web.archive.org/web/20120302052501/http://www.dar.org.br/",
+    "https://web.archive.org/web/20150406103050/http://dar.org.br/",
 ]
+
 await archiver.archive_urls(urls)
 ```
 
-## Sample Sites
-
-The project includes example URLs for testing:
-
-```python
-# DAR (Diocese Anglicana do Recife) historical snapshots
-- https://web.archive.org/web/20090430060114/http://www.dar.org.br/
-- https://web.archive.org/web/20120302052501/http://www.dar.org.br/
-- https://web.archive.org/web/20150406103050/http://dar.org.br/
-- https://web.archive.org/web/20101223085644/http://dar.ieab.org.br/
-
-# IEAB (Igreja Episcopal Anglicana do Brasil) historical snapshots
-- https://web.archive.org/web/20041022131803fw_/http://www.ieabrecife.com.br/
-- https://web.archive.org/web/20050829171410fw_/http://www.ieabweb.org.br/
-- https://web.archive.org/web/20051125104316fw_/http://www.ieabweb.org.br/dar/
-```
-
-See `examples/sample_sites.txt` for the complete list.
-
-## Project Structure
-
-```
-ChronosArchiver/
-├── src/
-│   └── chronos_archiver/
-│       ├── __init__.py          # Package initialization
-│       ├── __main__.py          # CLI entry point
-│       ├── cli.py               # Command-line interface
-│       ├── config.py            # Configuration management
-│       ├── discovery.py         # Stage 1: URL discovery
-│       ├── ingestion.py         # Stage 2: Content download
-│       ├── transformation.py    # Stage 3: Content transformation
-│       ├── indexing.py          # Stage 4: Storage & indexing
-│       ├── queue_manager.py     # Async queue management
-│       ├── models.py            # Data models
-│       └── utils.py             # Utility functions
-├── tests/
-│   ├── test_discovery.py
-│   ├── test_ingestion.py
-│   ├── test_transformation.py
-│   └── test_indexing.py
-├── docs/
-│   ├── architecture.md          # Detailed architecture docs
-│   ├── api.md                   # API reference
-│   └── usage.md                 # Usage guide
-├── examples/
-│   ├── sample_sites.txt         # Example URLs
-│   ├── basic_usage.py           # Basic examples
-│   └── advanced_usage.py        # Advanced examples
-├── config.yaml.example          # Sample configuration
-├── requirements.txt             # Dependencies
-├── requirements-dev.txt         # Development dependencies
-├── setup.py                     # Package setup
-├── pyproject.toml               # Modern Python packaging
-├── CONTRIBUTING.md              # Contribution guidelines
-└── README.md                    # This file
-```
-
-## Documentation
-
-- **[Architecture Guide](docs/architecture.md)**: Detailed system design and component interactions
-- **[API Reference](docs/api.md)**: Complete API documentation
-- **[Usage Guide](docs/usage.md)**: Advanced usage patterns and examples
-- **[Contributing](CONTRIBUTING.md)**: How to contribute to the project
-
-## Development
-
-### Setup Development Environment
-
-```bash
-# Install development dependencies
-pip install -r requirements-dev.txt
-
-# Run tests
-pytest tests/
-
-# Run tests with coverage
-pytest --cov=chronos_archiver tests/
-
-# Format code
-black src/ tests/
-isort src/ tests/
-
-# Lint code
-flake8 src/ tests/
-mypy src/
-```
-
-### Running Tests
+## 🐞 Testes / Testing
 
 ```bash
 # Run all tests
 pytest
 
-# Run specific test file
-pytest tests/test_discovery.py
-
-# Run with verbose output
-pytest -v
-
-# Run with coverage report
+# Run with coverage
 pytest --cov=chronos_archiver --cov-report=html
+
+# Run specific tests
+pytest tests/test_intelligence.py -v
+pytest tests/integration/ -v
 ```
 
-## Contributing
+## 📦 Docker
 
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+### Usando Docker Compose / Using Docker Compose
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+```bash
+# Start all services
+docker-compose up -d
 
-## Roadmap
+# View logs
+docker-compose logs -f api
+docker-compose logs -f worker
 
-- [ ] Add support for parallel processing across multiple machines
-- [ ] Implement incremental archiving (only download new snapshots)
-- [ ] Add web UI for browsing archived content
-- [ ] Support for additional archive sources beyond Wayback Machine
-- [ ] Advanced search with full-text indexing
-- [ ] Export to WARC format
-- [ ] Docker containerization
-- [ ] Kubernetes deployment manifests
+# Scale workers
+docker-compose up -d --scale worker=4
 
-## License
+# Stop services
+docker-compose down
+```
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+### Build Manual / Manual Build
 
-## Acknowledgments
+```bash
+# Build image
+docker build -t chronos-archiver .
 
-- [Internet Archive](https://archive.org/) for providing the Wayback Machine
-- The Python community for excellent async libraries
-- Contributors and maintainers
+# Run container
+docker run -d \
+  --name chronos \
+  -p 8000:8000 \
+  -v $(pwd)/archive:/app/archive \
+  -v $(pwd)/config.yaml:/app/config.yaml \
+  chronos-archiver
+```
 
-## Support
+## 🎓 Casos de Uso / Use Cases
 
-- 📧 Email: support@chronosarchiver.dev
-- 🐛 Issues: [GitHub Issues](https://github.com/dodopok/ChronosArchiver/issues)
-- 💬 Discussions: [GitHub Discussions](https://github.com/dodopok/ChronosArchiver/discussions)
+### 1. Pesquisa Histórica / Historical Research
+Arquive e analise versões históricas de sites para pesquisa acadêmica.
+
+Archive and analyze historical versions of websites for academic research.
+
+### 2. Preservação Digital / Digital Preservation
+Preserve conteúdo importante que pode desaparecer da web.
+
+Preserve important content that may disappear from the web.
+
+### 3. Análise de Conteúdo / Content Analysis
+Analise automaticamente conteúdo arquivado com NLP e inteligência artificial.
+
+Automatically analyze archived content with NLP and AI.
+
+### 4. Extração de Mídia / Media Extraction
+Detecte e catalogue vídeos e áudios embarcados em sites arquivados.
+
+Detect and catalog embedded videos and audio in archived sites.
+
+## 📊 Estrutura do Projeto / Project Structure
+
+```
+ChronosArchiver/
+├── src/chronos_archiver/
+│   ├── __init__.py
+│   ├── discovery.py          # Stage 1: URL discovery
+│   ├── ingestion.py          # Stage 2: Content download
+│   ├── transformation.py     # Stage 3: Content transformation
+│   ├── indexing.py           # Stage 4: Storage & indexing
+│   ├── intelligence.py       # 🧠 Intelligence engine
+│   ├── search.py             # 🔍 Meilisearch integration
+│   ├── tika.py               # 📑 Apache Tika integration
+│   ├── api.py                # 🌐 FastAPI web interface
+│   ├── queue_manager.py      # Queue management
+│   ├── models.py             # Data models
+│   ├── config.py             # Configuration
+│   ├── cli.py                # CLI interface
+│   └── utils.py              # Utilities
+├── tests/                    # 🧪 Test suite
+├── docs/                     # 📚 Documentation
+├── examples/                 # 💡 Usage examples
+├── docker-compose.yml        # 🐳 Docker configuration
+├── requirements.txt          # Dependencies
+└── config.yaml.example       # Sample configuration
+```
+
+## 🌟 Novos Recursos / New Features
+
+### v1.1.0 (Current)
+
+✅ Motor de inteligência com NLP / Intelligence engine with NLP  
+✅ Detecção de embeds (YouTube, Vimeo, etc.) / Embed detection  
+✅ Integração Meilisearch / Meilisearch integration  
+✅ Interface web com FastAPI / FastAPI web interface  
+✅ Integração Apache Tika / Apache Tika integration  
+✅ Suporte completo a português / Full Portuguese support  
+✅ Extração de entidades nomeadas / Named entity extraction  
+✅ Classificação de tópicos / Topic classification  
+✅ Busca com filtros e facetas / Faceted search  
+
+## 🗺️ Roadmap
+
+- [ ] Análise de sentimento / Sentiment analysis
+- [ ] Suporte a mais plataformas de vídeo / More video platform support
+- [ ] Dashboard de visualização / Visualization dashboard
+- [ ] Exportação WARC / WARC format export
+- [ ] API GraphQL / GraphQL API
+- [ ] Arquivamento incremental / Incremental archiving
+- [ ] Suporte a mais idiomas / More language support
+
+## 🤝 Contribuindo / Contributing
+
+Contribuições são bem-vindas! / Contributions are welcome!
+
+Veja [CONTRIBUTING.md](CONTRIBUTING.md) para detalhes. / See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+
+## 📝 Licença / License
+
+MIT License - veja [LICENSE](LICENSE) para detalhes. / See [LICENSE](LICENSE) for details.
+
+## 💬 Suporte / Support
+
+- **Issues**: [GitHub Issues](https://github.com/dodopok/ChronosArchiver/issues)
+- **Discussões / Discussions**: [GitHub Discussions](https://github.com/dodopok/ChronosArchiver/discussions)
+- **Email**: support@chronosarchiver.dev
+
+## 🚀 Agradecimentos / Acknowledgments
+
+- [Internet Archive](https://archive.org/) - Wayback Machine
+- [Meilisearch](https://www.meilisearch.com/) - Search engine
+- [Apache Tika](https://tika.apache.org/) - Content extraction
+- [spaCy](https://spacy.io/) - NLP library
+- [FastAPI](https://fastapi.tiangolo.com/) - Web framework
 
 ---
 
-**Made with ❤️ by Douglas Araujo**
+**Feito com ❤️ por Douglas Araujo / Made with ❤️ by Douglas Araujo**
