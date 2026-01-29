@@ -1,31 +1,32 @@
 # Core dependencies
-aiohttp>=3.8.0
+aiohttp>=3.8.0,<4.0.0
 asyncio-throttle>=1.0.0
 beautifulsoup4>=4.11.0
 click>=8.0.0
 lxml>=4.9.0
-pydantic>=2.0.0
+pydantic>=2.0.0,<3.0.0
 PyYAML>=6.0
-redis>=4.5.0
+redis>=4.5.0,<5.0.0
 requests>=2.28.0
-SQLAlchemy>=2.0.0
+SQLAlchemy>=2.0.0,<3.0.0
 tqdm>=4.65.0
 
 # Intelligence and NLP
-spacy>=3.5.0
+spacy>=3.5.0,<4.0.0
 langdetect>=1.0.9
 
 # Search engine
-meilisearch>=0.28.0
+meilisearch>=0.28.0,<1.0.0
 
 # Apache Tika
 tika>=2.6.0
 
 # Web API
-fastapi>=0.104.0
-uvicorn[standard]>=0.24.0
+fastapi>=0.104.0,<1.0.0
+uvicorn[standard]>=0.24.0,<1.0.0
 jinja2>=3.1.2
 python-multipart>=0.0.6
+websockets>=12.0
 
 # Optional: PostgreSQL support
-# psycopg2-binary>=2.9.0
+psycopg2-binary>=2.9.0; platform_system != "Windows"
