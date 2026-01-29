@@ -1,14 +1,14 @@
 import { useState } from 'react'
 import {
   Box,
-  Typography,
-  Paper,
   TextField,
   Button,
+  Paper,
   Grid,
   Alert,
   Chip,
   IconButton,
+  Typography,
 } from '@mui/material'
 import { Archive as ArchiveIcon, Add, Delete, Upload } from '@mui/icons-material'
 import { useDropzone } from 'react-dropzone'
@@ -23,6 +23,9 @@ export default function Archive() {
   const [urls, setUrls] = useState<string[]>([])
   const [currentUrl, setCurrentUrl] = useState('')
   const { jobs } = useJobStore()
+  
+  // Filter active jobs (not completed, failed, or skipped)
+  const activeJobs = jobs.filter((j) => !['indexed', 'failed', 'skipped'].includes(j.status))
 
   const archiveMutation = useMutation({
     mutationFn: (urlList: string[]) => archiveUrls(urlList),
