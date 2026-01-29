@@ -15,7 +15,29 @@ services:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
-      retries: 5
+      retries: 10
+      start_period: 10s
+    networks:
+      - chronos-network
+
+  # PostgreSQL database
+  postgres:
+    image: postgres:15-alpine
+    container_name: chronos-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-chronos}
+      POSTGRES_USER: ${POSTGRES_USER:-chronos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-chronos_password}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-chronos}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
       start_period: 10s
     networks:
       - chronos-network
@@ -37,8 +59,8 @@ services:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:7700/health"]
       interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 20s
+      retries: 10
+      start_period: 30s
     networks:
       - chronos-network
 
@@ -50,33 +72,11 @@ services:
     ports:
       - "9998:9998"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9998/tika"]
-      interval: 15s
+      test: ["CMD-SHELL", "curl -f http://localhost:9998/tika || exit 1"]
+      interval: 20s
       timeout: 10s
-      retries: 5
-      start_period: 60s
-    networks:
-      - chronos-network
-
-  # PostgreSQL (optional, for production)
-  postgres:
-    image: postgres:15-alpine
-    container_name: chronos-postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-chronos}
-      POSTGRES_USER: ${POSTGRES_USER:-chronos}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-chronos_password}
-    ports:
-      - "5433:5432"
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-chronos}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
+      retries: 10
+      start_period: 90s
     networks:
       - chronos-network
 
@@ -89,6 +89,8 @@ services:
     restart: unless-stopped
     depends_on:
       redis:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
       meilisearch:
         condition: service_healthy
@@ -112,12 +114,40 @@ services:
     networks:
       - chronos-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 60s
+      start_period: 90s
     command: uvicorn chronos_archiver.api:app --host 0.0.0.0 --port 8000
+
+  # ChronosArchiver workers
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - MEILISEARCH_HOST=http://meilisearch:7700
+      - TIKA_SERVER_URL=http://tika:9998
+      - DATABASE_TYPE=${DATABASE_TYPE:-sqlite}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - ARCHIVE_OUTPUT_DIR=/app/archive
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./archive:/app/archive
+      - ./logs:/app/logs
+      - ./config.yaml:/app/config.yaml:ro
+    networks:
+      - chronos-network
+    command: sh -c "sleep 20 && chronos workers start --count 4"
+    deploy:
+      replicas: 2
 
   # React Frontend
   frontend:
@@ -141,41 +171,7 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 15s
-
-  # ChronosArchiver workers
-  worker:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    depends_on:
-      redis:
-        condition: service_healthy
-      meilisearch:
-        condition: service_healthy
-      tika:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
-    environment:
-      - REDIS_URL=redis://redis:6379/0
-      - MEILISEARCH_HOST=http://meilisearch:7700
-      - TIKA_SERVER_URL=http://tika:9998
-      - DATABASE_TYPE=${DATABASE_TYPE:-sqlite}
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
-      - ARCHIVE_OUTPUT_DIR=/app/archive
-      - PYTHONUNBUFFERED=1
-    volumes:
-      - ./archive:/app/archive
-      - ./logs:/app/logs
-      - ./config.yaml:/app/config.yaml:ro
-    networks:
-      - chronos-network
-    command: sh -c "sleep 15 && chronos workers start --count 4"
-    deploy:
-      replicas: 2
+      start_period: 20s
 
 volumes:
   redis-data:
