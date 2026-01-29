@@ -6,7 +6,7 @@ interface ThemeState {
   toggleTheme: () => void
 }
 
-export const useThemeStore = create<ThemeState>()()
+export const useThemeStore = create<ThemeState>()(
   persist(
     (set) => ({
       mode: 'light',
