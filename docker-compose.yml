@@ -13,10 +13,10 @@ services:
     command: redis-server --appendonly yes --protected-mode no
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
+      interval: 5s
       timeout: 3s
-      retries: 3
-      start_period: 5s
+      retries: 5
+      start_period: 10s
     networks:
       - chronos-network
 
@@ -36,9 +36,9 @@ services:
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:7700/health"]
       interval: 10s
-      timeout: 3s
-      retries: 3
-      start_period: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     networks:
       - chronos-network
 
@@ -52,9 +52,9 @@ services:
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9998/tika"]
       interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
     networks:
       - chronos-network
 
@@ -68,14 +68,14 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-chronos}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-chronos_password}
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-chronos}"]
       interval: 10s
-      timeout: 3s
-      retries: 3
+      timeout: 5s
+      retries: 5
       start_period: 10s
     networks:
       - chronos-network
@@ -99,6 +99,8 @@ services:
       - MEILISEARCH_HOST=http://meilisearch:7700
       - TIKA_SERVER_URL=http://tika:9998
       - DATABASE_TYPE=${DATABASE_TYPE:-sqlite}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
       - ARCHIVE_OUTPUT_DIR=/app/archive
       - PYTHONUNBUFFERED=1
     ports:
@@ -112,9 +114,9 @@ services:
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 40s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
     command: uvicorn chronos_archiver.api:app --host 0.0.0.0 --port 8000
 
   # React Frontend
@@ -137,9 +139,9 @@ services:
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/"]
       interval: 30s
-      timeout: 3s
+      timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 15s
 
   # ChronosArchiver workers
   worker:
@@ -161,6 +163,8 @@ services:
       - MEILISEARCH_HOST=http://meilisearch:7700
       - TIKA_SERVER_URL=http://tika:9998
       - DATABASE_TYPE=${DATABASE_TYPE:-sqlite}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
       - ARCHIVE_OUTPUT_DIR=/app/archive
       - PYTHONUNBUFFERED=1
     volumes:
@@ -169,7 +173,7 @@ services:
       - ./config.yaml:/app/config.yaml:ro
     networks:
       - chronos-network
-    command: sh -c "sleep 10 && chronos workers start --count 4"
+    command: sh -c "sleep 15 && chronos workers start --count 4"
     deploy:
       replicas: 2
 
