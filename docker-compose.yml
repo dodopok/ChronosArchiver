@@ -97,14 +97,29 @@ services:
       tika:
         condition: service_healthy
     environment:
+      # Redis connection - use container name
       - REDIS_URL=redis://redis:6379/0
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+      # Meilisearch connection - use container name
       - MEILISEARCH_HOST=http://meilisearch:7700
+      - MEILI_HTTP_ADDR=meilisearch:7700
+      # Tika connection - use container name
       - TIKA_SERVER_URL=http://tika:9998
+      - TIKA_HOST=tika
+      - TIKA_PORT=9998
+      # PostgreSQL connection - use container name
       - DATABASE_TYPE=${DATABASE_TYPE:-sqlite}
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB:-chronos}
+      - POSTGRES_USER=${POSTGRES_USER:-chronos}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-chronos_password}
+      # Archive settings
       - ARCHIVE_OUTPUT_DIR=/app/archive
       - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app
     ports:
       - "8000:8000"
     volumes:
@@ -131,14 +146,29 @@ services:
       api:
         condition: service_healthy
     environment:
+      # Redis connection - use container name
       - REDIS_URL=redis://redis:6379/0
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+      # Meilisearch connection - use container name
       - MEILISEARCH_HOST=http://meilisearch:7700
+      - MEILI_HTTP_ADDR=meilisearch:7700
+      # Tika connection - use container name
       - TIKA_SERVER_URL=http://tika:9998
+      - TIKA_HOST=tika
+      - TIKA_PORT=9998
+      # PostgreSQL connection - use container name
       - DATABASE_TYPE=${DATABASE_TYPE:-sqlite}
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB:-chronos}
+      - POSTGRES_USER=${POSTGRES_USER:-chronos}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-chronos_password}
+      # Archive settings
       - ARCHIVE_OUTPUT_DIR=/app/archive
       - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app
     volumes:
       - ./archive:/app/archive
       - ./logs:/app/logs
@@ -164,6 +194,7 @@ services:
     networks:
       - chronos-network
     environment:
+      # Frontend runs in browser, so uses localhost for API access
       - VITE_API_URL=http://localhost:8000
       - VITE_WS_URL=http://localhost:8000
     healthcheck:
