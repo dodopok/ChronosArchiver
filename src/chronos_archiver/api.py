@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-import time
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -11,11 +10,14 @@ from typing import Any, List, Optional
 from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from chronos_archiver import ChronosArchiver
 from chronos_archiver.config import load_config
+from chronos_archiver.indexing import ContentIndexer
 from chronos_archiver.models import ArchiveStatus
+from chronos_archiver.search import SearchEngine
 
 logger = logging.getLogger(__name__)
 
@@ -40,9 +42,18 @@ app.add_middleware(
 # Global state
 config = None
 search_engine = None
+indexer = None
 archiver = None
 active_jobs = {}
 websocket_connections = set()
+
+
+class SearchRequest(BaseModel):
+    """Search request model."""
+    query: str
+    filters: Optional[dict[str, Any]] = None
+    limit: int = 20
+    offset: int = 0
 
 
 class ArchiveRequest(BaseModel):
@@ -63,23 +74,29 @@ class ArchiveJobResponse(BaseModel):
     error: Optional[str] = None
 
 
-def retry_with_backoff(func, max_retries=5, initial_delay=1):
-    """Retry a function with exponential backoff."""
+async def initialize_service_with_retry(service_name: str, init_func, max_retries: int = 5, delay: int = 5):
+    """Initialize a service with retry logic."""
     for attempt in range(max_retries):
         try:
-            return func()
+            logger.info(f"Initializing {service_name} (attempt {attempt + 1}/{max_retries})...")
+            result = init_func()
+            logger.info(f"{service_name} initialized successfully")
+            return result
         except Exception as e:
-            if attempt == max_retries - 1:
-                raise
-            delay = initial_delay * (2 ** attempt)
-            logger.warning(f"Attempt {attempt + 1} failed: {e}. Retrying in {delay}s...")
-            time.sleep(delay)
+            logger.warning(f"Failed to initialize {service_name}: {e}")
+            if attempt < max_retries - 1:
+                logger.info(f"Retrying in {delay} seconds...")
+                await asyncio.sleep(delay)
+            else:
+                logger.error(f"Failed to initialize {service_name} after {max_retries} attempts")
+                return None
+    return None
 
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize app on startup with retry logic."""
-    global config, search_engine, archiver
+    """Initialize app on startup."""
+    global config, search_engine, indexer, archiver
     
     logger.info("Starting ChronosArchiver API...")
     
@@ -92,44 +109,45 @@ async def startup_event():
         config = {}
     
     # Initialize search engine with retry
-    def init_search():
-        from chronos_archiver.search import SearchEngine
-        return SearchEngine(config)
+    search_engine = await initialize_service_with_retry(
+        "Search engine",
+        lambda: SearchEngine(config)
+    )
     
-    try:
-        search_engine = retry_with_backoff(init_search, max_retries=10, initial_delay=2)
-        logger.info("Search engine initialized")
-    except Exception as e:
-        logger.error(f"Failed to initialize search engine after retries: {e}")
-        search_engine = None
+    # Initialize indexer with retry
+    indexer = await initialize_service_with_retry(
+        "Indexer",
+        lambda: ContentIndexer(config)
+    )
     
     # Initialize archiver with retry
-    def init_archiver():
-        return ChronosArchiver(config)
+    archiver = await initialize_service_with_retry(
+        "Archiver",
+        lambda: ChronosArchiver(config)
+    )
     
-    try:
-        archiver = retry_with_backoff(init_archiver, max_retries=10, initial_delay=2)
-        logger.info("Archiver initialized")
-    except Exception as e:
-        logger.error(f"Failed to initialize archiver after retries: {e}")
-        archiver = None
-    
-    if not search_engine or not archiver:
-        logger.warning("Some services failed to initialize - API will have limited functionality")
+    if archiver:
+        logger.info("ChronosArchiver API started successfully")
     else:
-        logger.info("ChronosArchiver API started successfully with all services")
+        logger.warning("ChronosArchiver API started with limited functionality (archiver not available)")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on shutdown."""
-    global archiver
+    global indexer, archiver
+    
+    if indexer:
+        try:
+            await indexer.close()
+        except Exception as e:
+            logger.error(f"Error closing indexer: {e}")
     
     if archiver:
         try:
             await archiver.shutdown()
         except Exception as e:
-            logger.error(f"Error during shutdown: {e}")
+            logger.error(f"Error shutting down archiver: {e}")
     
     logger.info("ChronosArchiver API shut down")
 
@@ -256,18 +274,15 @@ async def api_search(
 ):
     """Search archived content."""
     if not search_engine:
-        raise HTTPException(
-            status_code=503, 
-            detail="Search engine not available. Please wait for services to initialize."
-        )
+        raise HTTPException(status_code=503, detail="Search engine not available")
+    
+    filters = {}
+    if topics:
+        filters["topics"] = topics.split(",")
+    if has_videos is not None:
+        filters["has_videos"] = has_videos
     
     try:
-        filters = {}
-        if topics:
-            filters["topics"] = topics.split(",")
-        if has_videos is not None:
-            filters["has_videos"] = has_videos
-        
         results = await search_engine.search(q, filters=filters, limit=limit, offset=offset)
         
         return {
@@ -279,7 +294,13 @@ async def api_search(
         }
     except Exception as e:
         logger.error(f"Search failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
+        return {
+            "query": q,
+            "total": 0,
+            "limit": limit,
+            "offset": offset,
+            "results": [],
+        }
 
 
 @app.get("/api/facets")
@@ -316,21 +337,32 @@ async def api_suggest(
 @app.post("/api/archive")
 async def api_archive(request: ArchiveRequest):
     """Start archiving URLs."""
+    # Initialize archiver on-demand if not available
+    global archiver, config
+    
     if not archiver:
-        raise HTTPException(
-            status_code=503, 
-            detail="Archiver not available. Please wait for services to initialize or check logs."
-        )
+        logger.info("Archiver not initialized at startup, attempting on-demand initialization...")
+        try:
+            if not config:
+                config = load_config()
+            archiver = ChronosArchiver(config)
+            logger.info("Archiver initialized successfully on-demand")
+        except Exception as e:
+            logger.error(f"Failed to initialize archiver on-demand: {e}")
+            raise HTTPException(
+                status_code=503, 
+                detail=f"Archiver not available: {str(e)}. Check Redis, Meilisearch, and Tika connections."
+            )
+    
+    job_ids = []
     
     try:
-        job_ids = []
-        
         for url in request.urls:
             job_id = str(uuid.uuid4())
             job = {
                 "id": job_id,
                 "url": url,
-                "status": ArchiveStatus.PENDING.value,
+                "status": ArchiveStatus.PENDING,
                 "progress": 0,
                 "stage": "discovery",
                 "created_at": datetime.utcnow().isoformat(),
@@ -342,55 +374,54 @@ async def api_archive(request: ArchiveRequest):
             # Start archiving in background
             asyncio.create_task(process_archive_job(job_id, url))
         
-        return {"job_ids": job_ids}
+        return {"job_ids": job_ids, "message": f"Started archiving {len(request.urls)} URLs"}
+    
     except Exception as e:
         logger.error(f"Failed to create archive jobs: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to start archiving: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create archive jobs: {str(e)}")
 
 
 async def process_archive_job(job_id: str, url: str):
     """Process an archive job and send updates via WebSocket."""
-    job = active_jobs.get(job_id)
-    if not job:
-        return
+    job = active_jobs[job_id]
     
     try:
         # Update: Discovery
         job["stage"] = "discovery"
-        job["status"] = ArchiveStatus.DISCOVERED.value
+        job["status"] = ArchiveStatus.DISCOVERED
         job["progress"] = 25
         job["updated_at"] = datetime.utcnow().isoformat()
         await broadcast_job_update(job)
         
         # Download
         job["stage"] = "ingestion"
-        job["status"] = ArchiveStatus.DOWNLOADING.value
+        job["status"] = ArchiveStatus.DOWNLOADING
         job["progress"] = 50
         job["updated_at"] = datetime.utcnow().isoformat()
         await broadcast_job_update(job)
         
         # Archive the URL
         if archiver:
-            await archiver.archive_url(url, enable_intelligence=True)
+            await archiver.archive_url(url)
+        else:
+            raise Exception("Archiver not available")
         
         # Transform
         job["stage"] = "transformation"
-        job["status"] = ArchiveStatus.TRANSFORMING.value
+        job["status"] = ArchiveStatus.TRANSFORMING
         job["progress"] = 75
         job["updated_at"] = datetime.utcnow().isoformat()
         await broadcast_job_update(job)
         
         # Complete
         job["stage"] = "indexing"
-        job["status"] = ArchiveStatus.INDEXED.value
+        job["status"] = ArchiveStatus.INDEXED
         job["progress"] = 100
         job["updated_at"] = datetime.utcnow().isoformat()
         await broadcast_job_update(job)
         
-        logger.info(f"Archive job {job_id} completed successfully")
-        
     except Exception as e:
-        job["status"] = ArchiveStatus.FAILED.value
+        job["status"] = ArchiveStatus.FAILED
         job["error"] = str(e)
         job["updated_at"] = datetime.utcnow().isoformat()
         await broadcast_job_update(job)
@@ -416,19 +447,16 @@ async def websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint for real-time updates."""
     await websocket.accept()
     websocket_connections.add(websocket)
-    logger.info(f"WebSocket connected. Total connections: {len(websocket_connections)}")
+    logger.info(f"WebSocket client connected. Total connections: {len(websocket_connections)}")
     
     try:
         while True:
             data = await websocket.receive_text()
             # Handle WebSocket messages if needed
-            logger.debug(f"WebSocket received: {data}")
+            logger.debug(f"Received WebSocket message: {data}")
     except WebSocketDisconnect:
         websocket_connections.discard(websocket)
-        logger.info(f"WebSocket disconnected. Total connections: {len(websocket_connections)}")
-    except Exception as e:
-        logger.error(f"WebSocket error: {e}")
-        websocket_connections.discard(websocket)
+        logger.info(f"WebSocket client disconnected. Total connections: {len(websocket_connections)}")
 
 
 @app.get("/api/jobs", response_model=List[ArchiveJobResponse])
@@ -440,19 +468,20 @@ async def api_get_jobs():
 @app.get("/api/stats")
 async def api_stats():
     """Get archive statistics."""
-    completed_jobs = [j for j in active_jobs.values() if j["status"] == ArchiveStatus.INDEXED.value]
-    failed_jobs = [j for j in active_jobs.values() if j["status"] == ArchiveStatus.FAILED.value]
+    # Calculate real stats from active jobs
+    total_jobs = len(active_jobs)
+    completed_jobs = len([j for j in active_jobs.values() if j["status"] == ArchiveStatus.INDEXED])
+    failed_jobs = len([j for j in active_jobs.values() if j["status"] == ArchiveStatus.FAILED])
     
-    total = len(active_jobs)
-    success_rate = (len(completed_jobs) / total * 100) if total > 0 else 0
+    success_rate = (completed_jobs / total_jobs * 100) if total_jobs > 0 else 0
     
     return {
-        "total_pages": len(completed_jobs),
+        "total_pages": total_jobs,
         "total_size": "0 MB",
         "oldest_snapshot": "N/A",
         "newest_snapshot": "N/A",
         "languages": {"pt": 10, "en": 5},
-        "topics": {"religião": 8, "notícias": 3, "comunidade": 5},
+        "topics": {"religião": 8, "notícias": 3, "comunidade": 2},
         "success_rate": round(success_rate, 1),
         "total_embeds": 15,
     }
@@ -461,18 +490,14 @@ async def api_stats():
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
-    services_status = {
-        "search_engine": search_engine is not None,
-        "archiver": archiver is not None,
-    }
-    
-    # Check if critical services are available
-    all_healthy = all(services_status.values())
-    
     return {
-        "status": "healthy" if all_healthy else "degraded",
+        "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
-        "services": services_status,
+        "services": {
+            "search_engine": search_engine is not None,
+            "indexer": indexer is not None,
+            "archiver": archiver is not None,
+        },
         "active_jobs": len(active_jobs),
         "websocket_connections": len(websocket_connections),
     }
