@@ -5,16 +5,18 @@ services:
   redis:
     image: redis:7-alpine
     container_name: chronos-redis
+    restart: unless-stopped
     ports:
       - "6379:6379"
     volumes:
       - redis-data:/data
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --protected-mode no
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 3s
       retries: 3
+      start_period: 5s
     networks:
       - chronos-network
 
@@ -22,32 +24,37 @@ services:
   meilisearch:
     image: getmeili/meilisearch:v1.5
     container_name: chronos-meilisearch
+    restart: unless-stopped
     ports:
       - "7700:7700"
     environment:
       - MEILI_ENV=development
       - MEILI_NO_ANALYTICS=true
+      - MEILI_HTTP_ADDR=0.0.0.0:7700
     volumes:
       - meilisearch-data:/meili_data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7700/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:7700/health"]
       interval: 10s
       timeout: 3s
       retries: 3
+      start_period: 10s
     networks:
       - chronos-network
 
   # Apache Tika for text extraction
   tika:
-    image: apache/tika:latest
+    image: apache/tika:latest-full
     container_name: chronos-tika
+    restart: unless-stopped
     ports:
       - "9998:9998"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9998/tika"]
-      interval: 10s
-      timeout: 3s
+      interval: 15s
+      timeout: 5s
       retries: 3
+      start_period: 30s
     networks:
       - chronos-network
 
@@ -55,19 +62,21 @@ services:
   postgres:
     image: postgres:15-alpine
     container_name: chronos-postgres
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: chronos
-      POSTGRES_USER: chronos
-      POSTGRES_PASSWORD: chronos_password
+      POSTGRES_DB: ${POSTGRES_DB:-chronos}
+      POSTGRES_USER: ${POSTGRES_USER:-chronos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-chronos_password}
     ports:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U chronos"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-chronos}"]
       interval: 10s
       timeout: 3s
       retries: 3
+      start_period: 10s
     networks:
       - chronos-network
 
@@ -77,6 +86,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: chronos-api
+    restart: unless-stopped
     depends_on:
       redis:
         condition: service_healthy
@@ -88,8 +98,9 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - MEILISEARCH_HOST=http://meilisearch:7700
       - TIKA_SERVER_URL=http://tika:9998
-      - DATABASE_TYPE=sqlite
+      - DATABASE_TYPE=${DATABASE_TYPE:-sqlite}
       - ARCHIVE_OUTPUT_DIR=/app/archive
+      - PYTHONUNBUFFERED=1
     ports:
       - "8000:8000"
     volumes:
@@ -98,7 +109,13 @@ services:
       - ./config.yaml:/app/config.yaml:ro
     networks:
       - chronos-network
-    command: uvicorn chronos_archiver.api:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    command: uvicorn chronos_archiver.api:app --host 0.0.0.0 --port 8000
 
   # React Frontend
   frontend:
@@ -106,8 +123,10 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: chronos-frontend
+    restart: unless-stopped
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     ports:
       - "3000:80"
     networks:
@@ -115,12 +134,19 @@ services:
     environment:
       - VITE_API_URL=http://localhost:8000
       - VITE_WS_URL=http://localhost:8000
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
 
   # ChronosArchiver workers
   worker:
     build:
       context: .
       dockerfile: Dockerfile
+    restart: unless-stopped
     depends_on:
       redis:
         condition: service_healthy
@@ -128,26 +154,32 @@ services:
         condition: service_healthy
       tika:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
     environment:
       - REDIS_URL=redis://redis:6379/0
       - MEILISEARCH_HOST=http://meilisearch:7700
       - TIKA_SERVER_URL=http://tika:9998
-      - DATABASE_TYPE=sqlite
+      - DATABASE_TYPE=${DATABASE_TYPE:-sqlite}
       - ARCHIVE_OUTPUT_DIR=/app/archive
+      - PYTHONUNBUFFERED=1
     volumes:
       - ./archive:/app/archive
       - ./logs:/app/logs
       - ./config.yaml:/app/config.yaml:ro
     networks:
       - chronos-network
-    command: chronos workers start --count 4
+    command: sh -c "sleep 10 && chronos workers start --count 4"
     deploy:
       replicas: 2
 
 volumes:
   redis-data:
+    driver: local
   meilisearch-data:
+    driver: local
   postgres-data:
+    driver: local
 
 networks:
   chronos-network:
